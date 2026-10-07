@@ -1,0 +1,366 @@
+<title>Strip Load Stress Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: textbook companion tool — inputs + result beside a cross-section sketch; stacks to one column on phones. */
+:root {
+  --bg: #f7f8fa;          /* page: cool paper, slightly blue */
+  --panel: #ffffff;       /* inputs and sketch surfaces */
+  --ink: #1b2330;         /* text */
+  --muted: #5b6676;       /* secondary text */
+  --rule: #d9dee6;        /* borders, grid */
+  --accent: #1f4fbf;      /* the book's figure blue */
+  --accent-soft: #e6ecfa;
+  --soil: #eef0f3;        /* ground in the sketch */
+  --load: #9aa4b2;
+  --point: #c2410c;       /* the evaluated point */
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643;
+    --accent: #8fb0ff; --accent-soft: #1f2b44; --soil: #1e2530; --load: #6b7686; --point: #fb923c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643;
+  --accent: #8fb0ff; --accent-soft: #1f2b44; --soil: #1e2530; --load: #6b7686; --point: #fb923c;
+  color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  padding-inline: 16px; padding-block: 16px 28px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; justify-self: start; }
+.seg button { font: 500 0.82rem var(--font-body); padding: 6px 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button + button { border-left: 1px solid var(--rule); }
+
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.02em; }
+.field label var { font-family: var(--font-display); font-style: italic; color: var(--ink); font-size: 0.95rem; }
+.inp { min-width: 0; display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 1rem var(--font-data); padding: 8px 10px; font-variant-numeric: tabular-nums; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 10px; color: var(--muted); font-size: 0.85rem; }
+.hint { font-size: 0.78rem; color: var(--muted); margin: 0; }
+
+.result { border-top: 1px solid var(--rule); padding-top: 14px; display: grid; gap: 10px; }
+.big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.big .lbl { font-family: var(--font-display); font-style: italic; font-size: 1.05rem; }
+.big .val { font: 500 2.1rem/1 var(--font-data); color: var(--accent); font-variant-numeric: tabular-nums; }
+.kpa { font: 500 1rem var(--font-data); color: var(--ink); }
+.note { font-size: 0.82rem; color: var(--muted); margin: 0; }
+dl.terms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; margin: 0; font-size: 0.86rem; }
+dl.terms dt { color: var(--muted); }
+dl.terms dt var { font-family: var(--font-display); font-style: italic; color: var(--ink); }
+dl.terms dd { margin: 0; text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+.sketch svg { width: 100%; height: auto; display: block; touch-action: none; cursor: crosshair; user-select: none; }
+.sketch .cap { font-size: 0.8rem; color: var(--muted); margin: 0; }
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .iso { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: 0.55; }
+svg .isolab { font-family: var(--font-data); font-size: 9px; fill: var(--accent); }
+svg .ground { stroke: var(--ink); stroke-width: 1.4; }
+svg .soil { fill: var(--soil); }
+svg .grid { stroke: var(--rule); stroke-width: 0.6; }
+svg .loadbar { fill: var(--load); }
+svg .arrow { stroke: var(--load); stroke-width: 1; }
+svg .pt { fill: var(--point); }
+svg .guide { stroke: var(--point); stroke-width: 0.8; stroke-dasharray: 3 3; }
+
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 10px; }
+.scroll { overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; font: 0.8rem var(--font-data); font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th { color: var(--muted); font-weight: 500; background: var(--panel); }
+thead th { position: sticky; top: 0; }
+tbody th { position: sticky; left: 0; }
+td.hl, th.hl { background: var(--accent-soft); color: var(--accent); }
+.rowlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 18px; font: 0.85rem var(--font-data); font-variant-numeric: tabular-nums; }
+.rowlist div { display: flex; justify-content: space-between; padding: 3px 6px; border-radius: 4px; }
+.rowlist div.hl { background: var(--accent-soft); color: var(--accent); }
+.foot { font-size: 0.8rem; color: var(--muted); margin: 0; max-width: 75ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Vertical stress under a uniform strip load</h1>
+    <p class="lede">Enter the strip width and the point's position to get Δσ<sub>z</sub> from eq. 8.12. You can also drag the point on the cross-section.</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="Inputs and result">
+      <div class="seg" role="group" aria-label="Input mode">
+        <button type="button" id="mode-m" aria-pressed="true">Distances (m)</button>
+        <button type="button" id="mode-d" aria-pressed="false">2x/B and 2z/B</button>
+      </div>
+
+      <div class="fields" id="fields-m">
+        <div class="field"><label for="B">Strip width <var>B</var></label>
+          <div class="inp"><input id="B" type="number" inputmode="decimal" min="0.01" step="0.1" value="2"><span class="unit">m</span></div></div>
+        <div class="field"><label for="q">Load <var>q</var> (optional)</label>
+          <div class="inp"><input id="q" type="number" inputmode="decimal" min="0" step="10" value="100"><span class="unit">kPa</span></div></div>
+        <div class="field"><label for="x">Offset from centreline <var>x</var></label>
+          <div class="inp"><input id="x" type="number" inputmode="decimal" step="0.1" value="1"><span class="unit">m</span></div></div>
+        <div class="field"><label for="z">Depth <var>z</var></label>
+          <div class="inp"><input id="z" type="number" inputmode="decimal" min="0" step="0.1" value="1"><span class="unit">m</span></div></div>
+      </div>
+
+      <div class="fields" id="fields-d" hidden>
+        <div class="field"><label for="X">2<var>x</var>/<var>B</var></label>
+          <div class="inp"><input id="X" type="number" inputmode="decimal" step="0.1" value="1"></div></div>
+        <div class="field"><label for="Z">2<var>z</var>/<var>B</var></label>
+          <div class="inp"><input id="Z" type="number" inputmode="decimal" min="0" step="0.1" value="1"></div></div>
+        <div class="field"><label for="q2">Load <var>q</var> (optional)</label>
+          <div class="inp"><input id="q2" type="number" inputmode="decimal" min="0" step="10" value="100"><span class="unit">kPa</span></div></div>
+      </div>
+      <p class="hint"><var>x</var> is measured from the centre of the strip; the result is the same for +<var>x</var> and −<var>x</var>.</p>
+
+      <div class="result" aria-live="polite">
+        <div class="big"><span class="lbl">Δσ<sub>z</sub> / q =</span><span class="val" id="ratio">0.4797</span><span class="kpa" id="kpa">= 47.97 kPa</span></div>
+        <p class="note" id="note"></p>
+        <dl class="terms">
+          <dt>2<var>x</var>/<var>B</var>, 2<var>z</var>/<var>B</var></dt><dd id="xz">1.000, 1.000</dd>
+          <dt><var>α</var> (angle subtended by the strip)</dt><dd id="alpha">–</dd>
+          <dt><var>β</var></dt><dd id="beta">–</dd>
+          <dt><var>α</var> + sin <var>α</var> cos(<var>α</var> + 2<var>β</var>)</dt><dd id="bracket">–</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel sketch" aria-label="Cross-section">
+      <svg id="svg" viewBox="0 0 400 290" role="img" aria-label="Cross-section of the strip load with stress isobars and the selected point"></svg>
+      <p class="cap">Isobars for Δσ<sub>z</sub> = 0.9q, 0.7q, 0.5q, 0.4q and 0.3q. Axes are 2x/B (across) and 2z/B (down). Tap or drag to move the point.</p>
+    </section>
+  </div>
+
+  <details id="row-details">
+    <summary>Values at this depth</summary>
+    <div class="dbody">
+      <p class="note" id="row-cap"></p>
+      <div class="rowlist" id="rowlist"></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Full table of Δσ<sub>z</sub> / q</summary>
+    <div class="dbody">
+      <p class="note">Same layout as Table 8.1: rows are 2z/B, columns are 2x/B. Computed from eq. 8.12. Scroll sideways on narrow screens.</p>
+      <div class="scroll"><table id="table"></table></div>
+    </div>
+  </details>
+
+  <p class="foot">Δσ<sub>z</sub>/q = (1/π)[tan⁻¹((X+1)/Z) − tan⁻¹((X−1)/Z) + 2Z(1+Z²−X²)/((X²+Z²+1)² − 4X²)], with X = 2x/B and Z = 2z/B. This is the same result as eq. 8.10, Δσ<sub>z</sub> = (q/π)[α + sin α cos(α + 2β)].</p>
+</div>
+
+<script>
+// ---------- stress (eq. 8.12) ----------
+function stripStress(X, Z) {
+  if (Z <= 0) { const a = Math.abs(X); return a < 1 ? 1 : (a === 1 ? 0.5 : 0); }
+  const t1 = Math.atan((X + 1) / Z) - Math.atan((X - 1) / Z);
+  const t2 = 2 * Z * (1 + Z * Z - X * X) / ((X * X + Z * Z + 1) ** 2 - 4 * X * X);
+  return (t1 + t2) / Math.PI;
+}
+
+// ---------- isobars: exact, parametrised by alpha (points seeing the strip under the same angle lie on a circle) ----------
+function bisect(f, lo, hi) { for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; (f(lo) * f(m) <= 0) ? hi = m : lo = m; } return (lo + hi) / 2; }
+function isobar(c) {               // returns points [X, Z] of the right half, from the strip edge to the centreline
+  const aC = bisect(a => a + Math.sin(a) - Math.PI * c, 1e-9, Math.PI);           // on the centreline
+  const aE = bisect(a => a - Math.sin(2 * a) / 2 - Math.PI * c, 1e-9, Math.PI);   // at the strip edge
+  const pts = [[1, 0]];
+  for (let k = 120; k >= 0; k--) {
+    const u = k / 120, a = aC + (aE - aC) * u * u;
+    const psi = Math.acos(Math.max(-1, Math.min(1, (Math.PI * c - a) / Math.sin(a))));
+    const b = (psi - a) / 2, z = 1 / (Math.tan((psi + a) / 2) - Math.tan(b)), x = 0.5 + z * Math.tan(b);
+    if (isFinite(x) && isFinite(z)) pts.push([2 * x, 2 * z]);
+  }
+  return pts;
+}
+
+// ---------- sketch ----------
+const VIEW = { x0: -3.2, x1: 3.2, z1: 4.2, left: 34, right: 392, top: 34, bottom: 282 };
+const sx = X => VIEW.left + (X - VIEW.x0) / (VIEW.x1 - VIEW.x0) * (VIEW.right - VIEW.left);
+const sz = Z => VIEW.top + Z / VIEW.z1 * (VIEW.bottom - VIEW.top);
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("svg");
+function el(tag, attrs, parent = svg) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
+
+function drawStatic() {
+  const cp = el("clipPath", { id: "plot" }, el("defs", {}));
+  el("rect", { x: VIEW.left, y: sz(0), width: VIEW.right - VIEW.left, height: sz(VIEW.z1) - sz(0) }, cp);
+  el("rect", { class: "soil", x: VIEW.left, y: sz(0), width: VIEW.right - VIEW.left, height: sz(VIEW.z1) - sz(0) });
+  for (let Z = 1; Z <= 4; Z++) {
+    el("line", { class: "grid", x1: VIEW.left, x2: VIEW.right, y1: sz(Z), y2: sz(Z) });
+    el("text", { x: VIEW.left - 6, y: sz(Z) + 3.5, "text-anchor": "end", "font-size": 10 }).textContent = Z;
+  }
+  for (let X = -3; X <= 3; X++) {
+    el("line", { class: "grid", x1: sx(X), x2: sx(X), y1: sz(0), y2: sz(VIEW.z1) });
+  }
+  [-3, -2, -1, 0, 1, 2, 3].forEach(X => { el("text", { x: sx(X), y: sz(0) - 26, "text-anchor": "middle", "font-size": 10 }).textContent = X; });
+  el("text", { x: VIEW.left - 6, y: sz(0) - 24, "text-anchor": "end", "font-size": 10 }).textContent = "2x/B";
+  el("text", { x: VIEW.left - 6, y: sz(0) + 12, "text-anchor": "end", "font-size": 10 }).textContent = "2z/B";
+  // isobars (both halves)
+  const isoGroup = el("g", { "clip-path": "url(#plot)" });
+  [0.9, 0.7, 0.5, 0.4, 0.3].forEach(c => {
+    const pts = isobar(c);
+    const right = pts.map(([X, Z]) => `${sx(X).toFixed(1)},${sz(Z).toFixed(1)}`);
+    const left = pts.slice().reverse().map(([X, Z]) => `${sx(-X).toFixed(1)},${sz(Z).toFixed(1)}`);
+    el("polyline", { class: "iso", points: right.concat(left).join(" ") }, isoGroup);
+    const deepest = pts[pts.length - 1];
+    if (sz(deepest[1]) < VIEW.bottom - 4) el("text", { class: "isolab", x: sx(0) + 3, y: sz(deepest[1]) - 3 }).textContent = c;
+  });
+  // ground and load
+  el("line", { class: "ground", x1: VIEW.left, x2: VIEW.right, y1: sz(0), y2: sz(0) });
+  el("rect", { class: "loadbar", x: sx(-1), y: sz(0) - 4, width: sx(1) - sx(-1), height: 4 });
+  for (let k = -4; k <= 4; k++) {
+    const X = k / 4;
+    el("line", { class: "arrow", x1: sx(X), x2: sx(X), y1: sz(0) - 18, y2: sz(0) - 5 });
+    el("path", { d: `M${sx(X) - 2.5},${sz(0) - 8} L${sx(X)},${sz(0) - 4.5} L${sx(X) + 2.5},${sz(0) - 8}`, fill: "none", class: "arrow" });
+  }
+  el("line", { class: "arrow", x1: sx(-1), x2: sx(1), y1: sz(0) - 18, y2: sz(0) - 18 });
+  el("text", { x: sx(1) + 4, y: sz(0) - 14, "font-size": 11 }).textContent = "q";
+}
+drawStatic();
+const guideV = el("line", { class: "guide" }), guideH = el("line", { class: "guide" });
+const dot = el("circle", { class: "pt", r: 5 });
+
+// ---------- state & inputs ----------
+const $ = id => document.getElementById(id);
+let mode = "m";
+const state = { B: 2, x: 1, z: 1, q: 100, X: 1, Z: 1 };
+const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+
+function readInputs() {
+  if (mode === "m") {
+    state.B = Math.max(0.01, num($("B").value, state.B));
+    state.x = num($("x").value, state.x);
+    state.z = Math.max(0, num($("z").value, state.z));
+    state.q = num($("q").value, NaN);
+    state.X = 2 * state.x / state.B; state.Z = 2 * state.z / state.B;
+  } else {
+    state.X = num($("X").value, state.X);
+    state.Z = Math.max(0, num($("Z").value, state.Z));
+    state.q = num($("q2").value, NaN);
+  }
+}
+function writeInputsFromXZ() {          // after dragging: keep both input sets in step
+  $("X").value = +state.X.toFixed(2); $("Z").value = +state.Z.toFixed(2);
+  state.x = state.X * state.B / 2; state.z = state.Z * state.B / 2;
+  $("x").value = +state.x.toFixed(3); $("z").value = +state.z.toFixed(3);
+}
+
+const f4 = v => v.toFixed(4);
+const deg = r => (r * 180 / Math.PI).toFixed(2) + "°";
+function update() {
+  const { X, Z, q } = state;
+  const r = stripStress(X, Z);
+  $("ratio").textContent = f4(r);
+  $("kpa").textContent = isFinite(q) && q > 0 ? `= ${(r * q).toFixed(2)} kPa` : "";
+  $("xz").textContent = `${X.toFixed(3)}, ${Z.toFixed(3)}`;
+  if (Z > 0) {
+    const beta = Math.atan((X - 1) / Z), alpha = Math.atan((X + 1) / Z) - beta;
+    $("alpha").textContent = `${deg(alpha)} = ${alpha.toFixed(4)} rad`;
+    $("beta").textContent = `${deg(beta)} = ${beta.toFixed(4)} rad`;
+    $("bracket").textContent = (alpha + Math.sin(alpha) * Math.cos(alpha + 2 * beta)).toFixed(4);
+    $("note").textContent = "";
+  } else {
+    ["alpha", "beta", "bracket"].forEach(id => $(id).textContent = "–");
+    $("note").textContent = Math.abs(X) === 1
+      ? "At the surface the stress jumps from q to 0 at the edge of the strip; 0.5 is the limit approached from below."
+      : "At the surface Δσz equals the applied load: q under the strip and 0 outside it.";
+  }
+  // sketch
+  const cx = sx(Math.max(VIEW.x0, Math.min(VIEW.x1, X))), cz = sz(Math.min(VIEW.z1, Z));
+  dot.setAttribute("cx", cx); dot.setAttribute("cy", cz);
+  guideV.setAttribute("x1", cx); guideV.setAttribute("x2", cx); guideV.setAttribute("y1", sz(0)); guideV.setAttribute("y2", cz);
+  guideH.setAttribute("x1", sx(0)); guideH.setAttribute("x2", cx); guideH.setAttribute("y1", cz); guideH.setAttribute("y2", cz);
+  updateRow(); highlightTable();
+}
+
+// values at this depth
+function updateRow() {
+  const Z = state.Z, Xa = Math.abs(state.X);
+  $("row-cap").textContent = `2z/B = ${Z.toFixed(2)}. Values for 2x/B from 0 to 3 (the same for negative x).`;
+  const box = $("rowlist"); box.textContent = "";
+  for (let i = 0; i <= 30; i++) {
+    const X = i / 10, d = document.createElement("div");
+    if (Math.abs(X - Xa) < 0.05) d.className = "hl";
+    d.innerHTML = `<span>${X.toFixed(1)}</span><span>${f4(stripStress(X, Z))}</span>`;
+    box.appendChild(d);
+  }
+}
+
+// full table
+const TX = Array.from({ length: 21 }, (_, i) => i / 10), TZ = Array.from({ length: 41 }, (_, i) => i / 10);
+(function buildTable() {
+  const t = $("table");
+  let h = "<thead><tr><th scope=\"col\">2z/B \\ 2x/B</th>" + TX.map(X => `<th scope="col">${X.toFixed(1)}</th>`).join("") + "</tr></thead><tbody>";
+  for (const Z of TZ) {
+    h += `<tr><th scope="row">${Z.toFixed(1)}</th>` + TX.map(X => `<td>${f4(stripStress(X, Z))}</td>`).join("") + "</tr>";
+  }
+  t.innerHTML = h + "</tbody>";
+})();
+function highlightTable() {
+  const t = $("table");
+  t.querySelectorAll(".hl").forEach(c => c.classList.remove("hl"));
+  const xi = Math.round(Math.abs(state.X) * 10), zi = Math.round(state.Z * 10);
+  if (xi <= 20 && zi <= 40 && Math.abs(Math.abs(state.X) * 10 - xi) < 1e-6 && Math.abs(state.Z * 10 - zi) < 1e-6) {
+    const row = t.tBodies[0].rows[zi]; if (row) row.cells[xi + 1].classList.add("hl");
+  }
+}
+
+// mode switch
+function setMode(m) {
+  mode = m;
+  $("mode-m").setAttribute("aria-pressed", m === "m"); $("mode-d").setAttribute("aria-pressed", m === "d");
+  $("fields-m").hidden = m !== "m"; $("fields-d").hidden = m !== "d";
+  if (m === "d") { $("X").value = +state.X.toFixed(3); $("Z").value = +state.Z.toFixed(3); $("q2").value = $("q").value; }
+  else { $("q").value = $("q2").value; writeInputsFromXZ(); }
+  readInputs(); update();
+}
+$("mode-m").addEventListener("click", () => setMode("m"));
+$("mode-d").addEventListener("click", () => setMode("d"));
+["B", "x", "z", "q", "X", "Z", "q2"].forEach(id => $(id).addEventListener("input", () => { readInputs(); update(); }));
+
+// drag on the sketch
+function fromPointer(ev) {
+  const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  const s = p.matrixTransform(svg.getScreenCTM().inverse());
+  const X = VIEW.x0 + (s.x - VIEW.left) / (VIEW.right - VIEW.left) * (VIEW.x1 - VIEW.x0);
+  const Z = (s.y - VIEW.top) / (VIEW.bottom - VIEW.top) * VIEW.z1;
+  state.X = Math.round(Math.max(VIEW.x0, Math.min(VIEW.x1, X)) * 100) / 100;
+  state.Z = Math.round(Math.max(0, Math.min(VIEW.z1, Z)) * 100) / 100;
+  if (mode === "m") state.B = Math.max(0.01, num($("B").value, state.B));
+  writeInputsFromXZ(); update();
+}
+let dragging = false;
+svg.addEventListener("pointerdown", e => { dragging = true; svg.setPointerCapture(e.pointerId); fromPointer(e); });
+svg.addEventListener("pointermove", e => { if (dragging) fromPointer(e); });
+svg.addEventListener("pointerup", () => { dragging = false; });
+svg.addEventListener("pointercancel", () => { dragging = false; });
+
+readInputs(); update();
+</script>
