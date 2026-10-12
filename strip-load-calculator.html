@@ -1,3 +1,8 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strip Load Stress Calculator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,6 +39,7 @@
 
 [hidden] { display: none !important; }
 body {
+  margin: 0;
   background: var(--bg); color: var(--ink);
   font: 15px/1.5 var(--font-body);
   padding-inline: 16px; padding-block: 16px 28px;
@@ -64,10 +70,15 @@ h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; 
 .hint { font-size: 0.78rem; color: var(--muted); margin: 0; }
 
 .result { border-top: 1px solid var(--rule); padding-top: 14px; display: grid; gap: 10px; }
-.big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.big .lbl { font-family: var(--font-display); font-style: italic; font-size: 1.05rem; }
-.big .val { font: 500 2.1rem/1 var(--font-data); color: var(--accent); font-variant-numeric: tabular-nums; }
-.kpa { font: 500 1rem var(--font-data); color: var(--ink); }
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 1fr)); gap: 10px; }
+.res { display: grid; gap: 4px; align-content: start; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; min-width: 0; }
+.res .lbl { font-family: var(--font-display); font-style: italic; font-size: 1rem; color: var(--muted); }
+.res .val { font: 500 1.35rem/1.1 var(--font-data); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.res.primary { background: var(--accent-soft); border-color: var(--accent); }
+.res.primary .lbl { color: var(--accent); }
+.res.primary .val { font-size: clamp(1.5rem, 4.2vw, 2.1rem); color: var(--accent); }
+.res .unit { font-size: 0.55em; margin-left: 4px; }
+.res .sub { font-size: 0.78rem; color: var(--muted); }
 .note { font-size: 0.82rem; color: var(--muted); margin: 0; }
 dl.terms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; margin: 0; font-size: 0.86rem; }
 dl.terms dt { color: var(--muted); }
@@ -104,6 +115,8 @@ td.hl, th.hl { background: var(--accent-soft); color: var(--accent); }
 .foot { font-size: 0.8rem; color: var(--muted); margin: 0; max-width: 75ch; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header>
@@ -140,7 +153,10 @@ td.hl, th.hl { background: var(--accent-soft); color: var(--accent); }
       <p class="hint"><var>x</var> is measured from the centre of the strip; the result is the same for +<var>x</var> and −<var>x</var>.</p>
 
       <div class="result" aria-live="polite">
-        <div class="big"><span class="lbl">Δσ<sub>z</sub> / q =</span><span class="val" id="ratio">0.4797</span><span class="kpa" id="kpa">= 47.97 kPa</span></div>
+        <div class="results">
+          <div class="res primary"><span class="lbl">Δσ<sub>z</sub></span><span class="val"><span id="kpa">47.97</span><span class="unit" id="kpa-unit">kPa</span></span><span class="sub" id="kpa-hint" hidden>Enter q to get the stress in kPa.</span></div>
+          <div class="res"><span class="lbl">Δσ<sub>z</sub> / q</span><span class="val" id="ratio">0.4797</span></div>
+        </div>
         <p class="note" id="note"></p>
         <dl class="terms">
           <dt>2<var>x</var>/<var>B</var>, 2<var>z</var>/<var>B</var></dt><dd id="xz">1.000, 1.000</dd>
@@ -278,7 +294,9 @@ function update() {
   const { X, Z, q } = state;
   const r = stripStress(X, Z);
   $("ratio").textContent = f4(r);
-  $("kpa").textContent = isFinite(q) && q > 0 ? `= ${(r * q).toFixed(2)} kPa` : "";
+  const hasQ = isFinite(q) && q > 0;
+  $("kpa").textContent = hasQ ? (r * q).toFixed(2) : "–";
+  $("kpa-unit").hidden = !hasQ; $("kpa-hint").hidden = hasQ;
   $("xz").textContent = `${X.toFixed(3)}, ${Z.toFixed(3)}`;
   if (Z > 0) {
     const beta = Math.atan((X - 1) / Z), alpha = Math.atan((X + 1) / Z) - beta;
@@ -364,3 +382,5 @@ svg.addEventListener("pointercancel", () => { dragging = false; });
 
 readInputs(); update();
 </script>
+</body>
+</html>

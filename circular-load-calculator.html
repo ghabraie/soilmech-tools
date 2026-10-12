@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circular Load Stress Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: textbook companion tool — inputs + result beside a cross-section sketch; stacks to one column on phones. */
+:root {
+  --bg: #f7f8fa;          /* page: cool paper, slightly blue */
+  --panel: #ffffff;       /* inputs and sketch surfaces */
+  --ink: #1b2330;         /* text */
+  --muted: #5b6676;       /* secondary text */
+  --rule: #d9dee6;        /* borders, grid */
+  --accent: #1f4fbf;      /* the book's figure blue */
+  --accent-soft: #e6ecfa;
+  --soil: #eef0f3;        /* ground in the sketch */
+  --load: #9aa4b2;
+  --point: #c2410c;       /* the evaluated point */
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643;
+    --accent: #8fb0ff; --accent-soft: #1f2b44; --soil: #1e2530; --load: #6b7686; --point: #fb923c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643;
+  --accent: #8fb0ff; --accent-soft: #1f2b44; --soil: #1e2530; --load: #6b7686; --point: #fb923c;
+  color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font-body);
+  padding-inline: 16px; padding-block: 16px 28px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; justify-self: start; }
+.seg button { font: 500 0.82rem var(--font-body); padding: 6px 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button + button { border-left: 1px solid var(--rule); }
+
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.02em; }
+.field label var { font-family: var(--font-display); font-style: italic; color: var(--ink); font-size: 0.95rem; }
+.inp { min-width: 0; display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 1rem var(--font-data); padding: 8px 10px; font-variant-numeric: tabular-nums; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 10px; color: var(--muted); font-size: 0.85rem; }
+.hint { font-size: 0.78rem; color: var(--muted); margin: 0; }
+
+.result { border-top: 1px solid var(--rule); padding-top: 14px; display: grid; gap: 10px; }
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 1fr)); gap: 10px; }
+.res { display: grid; gap: 4px; align-content: start; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; min-width: 0; }
+.res .lbl { font-family: var(--font-display); font-style: italic; font-size: 1rem; color: var(--muted); }
+.res .val { font: 500 1.35rem/1.1 var(--font-data); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.res.primary { background: var(--accent-soft); border-color: var(--accent); }
+.res.primary .lbl { color: var(--accent); }
+.res.primary .val { font-size: clamp(1.5rem, 4.2vw, 2.1rem); color: var(--accent); }
+.res .unit { font-size: 0.55em; margin-left: 4px; }
+.res .sub { font-size: 0.78rem; color: var(--muted); }
+.note { font-size: 0.82rem; color: var(--muted); margin: 0; }
+dl.terms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; margin: 0; font-size: 0.86rem; }
+dl.terms dt { color: var(--muted); }
+dl.terms dt var { font-family: var(--font-display); font-style: italic; color: var(--ink); }
+dl.terms dd { margin: 0; text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+.sketch svg { width: 100%; height: auto; display: block; touch-action: none; cursor: crosshair; user-select: none; }
+.sketch .cap { font-size: 0.8rem; color: var(--muted); margin: 0; }
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .iso { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: 0.55; }
+svg .isolab { font-family: var(--font-data); font-size: 9px; fill: var(--accent); }
+svg .ground { stroke: var(--ink); stroke-width: 1.4; }
+svg .soil { fill: var(--soil); }
+svg .grid { stroke: var(--rule); stroke-width: 0.6; }
+svg .loadbar { fill: var(--load); }
+svg .loadtri { fill: var(--soil); stroke: var(--load); stroke-width: 1; }
+svg .arrow { stroke: var(--load); stroke-width: 1; }
+svg .pt { fill: var(--point); }
+svg .guide { stroke: var(--point); stroke-width: 0.8; stroke-dasharray: 3 3; }
+
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 10px; }
+.scroll { overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; font: 0.8rem var(--font-data); font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th { color: var(--muted); font-weight: 500; background: var(--panel); }
+thead th { position: sticky; top: 0; }
+tbody th { position: sticky; left: 0; }
+td.hl, th.hl { background: var(--accent-soft); color: var(--accent); }
+.rowlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 18px; font: 0.85rem var(--font-data); font-variant-numeric: tabular-nums; }
+.rowlist div { display: flex; justify-content: space-between; padding: 3px 6px; border-radius: 4px; }
+.rowlist div.hl { background: var(--accent-soft); color: var(--accent); }
+.foot { font-size: 0.8rem; color: var(--muted); margin: 0; max-width: 75ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Vertical stress under a uniformly loaded circular area</h1>
+    <p class="lede">Enter the radius of the loaded area and the point's position to get Δσ<sub>z</sub>. You can also drag the point on the cross-section.</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="Inputs and result">
+      <div class="seg" role="group" aria-label="Input mode">
+        <button type="button" id="mode-m" aria-pressed="true">Distances (m)</button>
+        <button type="button" id="mode-d" aria-pressed="false">r/R and z/R</button>
+      </div>
+
+      <div class="fields" id="fields-m">
+        <div class="field"><label for="R">Radius <var>R</var></label>
+          <div class="inp"><input id="R" type="number" inputmode="decimal" min="0.01" step="0.1" value="2"><span class="unit">m</span></div></div>
+        <div class="field"><label for="q">Load <var>q</var> (optional)</label>
+          <div class="inp"><input id="q" type="number" inputmode="decimal" min="0" step="10" value="100"><span class="unit">kPa</span></div></div>
+        <div class="field"><label for="r">Distance from centre <var>r</var></label>
+          <div class="inp"><input id="r" type="number" inputmode="decimal" min="0" step="0.1" value="1"><span class="unit">m</span></div></div>
+        <div class="field"><label for="z">Depth <var>z</var></label>
+          <div class="inp"><input id="z" type="number" inputmode="decimal" min="0" step="0.1" value="2"><span class="unit">m</span></div></div>
+      </div>
+
+      <div class="fields" id="fields-d" hidden>
+        <div class="field"><label for="dX"><var>r</var>/<var>R</var></label>
+          <div class="inp"><input id="dX" type="number" inputmode="decimal" min="0" step="0.1" value="0.5"></div></div>
+        <div class="field"><label for="dZ"><var>z</var>/<var>R</var></label>
+          <div class="inp"><input id="dZ" type="number" inputmode="decimal" min="0" step="0.1" value="1"></div></div>
+        <div class="field"><label for="q2">Load <var>q</var> (optional)</label>
+          <div class="inp"><input id="q2" type="number" inputmode="decimal" min="0" step="10" value="100"><span class="unit">kPa</span></div></div>
+      </div>
+      <p class="hint"><var>r</var> is the horizontal distance from the point to the centre of the loaded circle, in any direction.</p>
+
+      <div class="result" aria-live="polite">
+        <div class="results">
+          <div class="res primary"><span class="lbl">Δσ<sub>z</sub></span><span class="val"><span id="kpa">–</span><span class="unit" id="kpa-unit">kPa</span></span><span class="sub" id="kpa-hint" hidden>Enter q to get the stress in kPa.</span></div>
+          <div class="res"><span class="lbl">Δσ<sub>z</sub> / q</span><span class="val" id="ratio">–</span></div>
+        </div>
+        <p class="note" id="note"></p>
+        <dl class="terms">
+          <dt><var>r</var>/<var>R</var>, <var>z</var>/<var>R</var></dt><dd id="xz">–</dd>
+          <dt>Δσ<sub>z</sub>/q under the centre at this depth</dt><dd id="centre">–</dd>
+          <dt>This point as a share of the centre value</dt><dd id="share">–</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="panel sketch" aria-label="Cross-section">
+      <svg id="svg" viewBox="0 0 400 290" role="img" aria-label="Vertical section through the centre of the loaded circle with stress isobars and the selected point"></svg>
+      <p class="cap">Vertical section through the centre of the circle. Isobars for Δσ<sub>z</sub> = 0.9q, 0.7q, 0.5q, 0.3q, 0.2q and 0.1q. Axes are r/R (across) and z/R (down). Tap or drag to move the point.</p>
+    </section>
+  </div>
+
+  <details id="row-details">
+    <summary>Values at this depth</summary>
+    <div class="dbody">
+      <p class="note" id="row-cap"></p>
+      <div class="rowlist" id="rowlist"></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Full table of Δσ<sub>z</sub> / q</summary>
+    <div class="dbody">
+      <p class="note">Same rows and columns as the table in the book: rows are z/R, columns are r/R. Scroll sideways on narrow screens.</p>
+      <div class="scroll"><table id="table"></table></div>
+    </div>
+  </details>
+
+  <p class="foot">Under the centre, Δσ<sub>z</sub>/q = 1 − 1/[(R/z)² + 1]<sup>3/2</sup>. At other points there is no simple formula; the calculator integrates the Boussinesq solution over the loaded circle numerically, as (1/2π)∫[F(ρ₁) − F(ρ₂)]dθ with F(ρ) = (z/√(ρ² + z²))³, where ρ₁ and ρ₂ are the distances along a ray from the point to where it enters and leaves the circle.</p>
+</div>
+
+<script>
+// Delta sigma_z / q for a uniformly loaded circle; X = r/R (>= 0), Z = z/R.
+// Single integral of Boussinesq along rays from the point (theta from the line towards the centre):
+//   (1/pi) * int_0^pi [F(rho1) - F(rho2)] dtheta,  F(rho) = (Z / sqrt(rho^2 + Z^2))^3,
+//   rho1,2 = X cos(theta) -/+ sqrt(1 - X^2 sin^2(theta))   (rho1 = 0 inside the circle; outside only |sin| <= 1/X)
+const GL = (() => {                       // Gauss-Legendre nodes/weights on [0, 1]
+  const n = 120, x = [], w = [];
+  for (let i = 1; i <= n; i++) {
+    let t = Math.cos(Math.PI * (i - 0.25) / (n + 0.5)), dp = 0;
+    for (let it = 0; it < 100; it++) {
+      let p0 = 1, p1 = t;
+      for (let k = 2; k <= n; k++) { const p2 = ((2 * k - 1) * t * p1 - (k - 1) * p0) / k; p0 = p1; p1 = p2; }
+      dp = n * (t * p1 - p0) / (t * t - 1);
+      const dt = p1 / dp; t -= dt; if (Math.abs(dt) < 1e-15) break;
+    }
+    x.push((t + 1) / 2); w.push(1 / ((1 - t * t) * dp * dp));
+  }
+  return { x, w };
+})();
+function circleStress(X, Z) {
+  X = Math.abs(X);
+  if (Z <= 0) return X < 1 ? 1 : (X === 1 ? 0.5 : 0);
+  const F = rho => (Z / Math.sqrt(rho * rho + Z * Z)) ** 3;
+  let s = 0;
+  if (X < 1) {
+    for (let i = 0; i < GL.x.length; i++) {
+      const th = Math.PI * GL.x[i], c = Math.cos(th), sn = Math.sin(th);
+      const rho2 = X * c + Math.sqrt(Math.max(0, 1 - X * X * sn * sn));
+      s += GL.w[i] * Math.PI * (1 - F(rho2));
+    }
+  } else {
+    const thm = Math.asin(1 / X);                  // only rays with |sin theta| <= 1/X hit the circle
+    for (let i = 0; i < GL.x.length; i++) {        // theta = thm (1 - u^2) removes the sqrt end behaviour
+      const u = GL.x[i], th = thm * (1 - u * u), jac = 2 * thm * u;
+      const c = Math.cos(th), sn = Math.sin(th), d = Math.sqrt(Math.max(0, 1 - X * X * sn * sn));
+      s += GL.w[i] * jac * (F(X * c - d) - F(X * c + d));
+    }
+  }
+  return s / Math.PI;
+}
+
+const centreStress = Z => Z <= 0 ? 1 : 1 - 1 / ((1 / Z) ** 2 + 1) ** 1.5;
+
+// ---------- sketch ----------
+const VIEW = { x0: -3.1, x1: 3.1, z1: 4.2, left: 34, right: 392, top: 34, bottom: 282 };
+const sx = X => VIEW.left + (X - VIEW.x0) / (VIEW.x1 - VIEW.x0) * (VIEW.right - VIEW.left);
+const sz = Z => VIEW.top + Z / VIEW.z1 * (VIEW.bottom - VIEW.top);
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("svg");
+function el(tag, attrs, parent = svg) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
+
+// isobars: one grid of values (right half; the section is symmetric), traced with marching squares
+function isobarSegments(levels) {
+  const nx = 200, nz = 220;
+  const Xs = Array.from({ length: nx + 1 }, (_, i) => VIEW.x1 * i / nx);
+  const Zs = Array.from({ length: nz + 1 }, (_, j) => VIEW.z1 * (j / nz) ** 1.5);
+  const V = Zs.map(Z => Xs.map(X => circleStress(X, Z)));
+  const out = {};
+  for (const level of levels) {
+    const segs = [], lerp = (a, b, va, vb) => a + (b - a) * (level - va) / (vb - va);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const v = [V[j][i], V[j][i + 1], V[j + 1][i + 1], V[j + 1][i]];
+      const p = [[Xs[i], Zs[j]], [Xs[i + 1], Zs[j]], [Xs[i + 1], Zs[j + 1]], [Xs[i], Zs[j + 1]]];
+      const cut = [];
+      for (let e = 0; e < 4; e++) {
+        const a = e, b = (e + 1) % 4;
+        if ((v[a] - level) * (v[b] - level) < 0) cut.push([lerp(p[a][0], p[b][0], v[a], v[b]), lerp(p[a][1], p[b][1], v[a], v[b])]);
+      }
+      if (cut.length === 2) segs.push(cut);
+      else if (cut.length === 4) { segs.push([cut[0], cut[1]]); segs.push([cut[2], cut[3]]); }
+    }
+    out[level] = segs;
+  }
+  return out;
+}
+
+function drawStatic() {
+  const cp = el("clipPath", { id: "plot" }, el("defs", {}));
+  el("rect", { x: VIEW.left, y: sz(0), width: VIEW.right - VIEW.left, height: sz(VIEW.z1) - sz(0) }, cp);
+  el("rect", { class: "soil", x: VIEW.left, y: sz(0), width: VIEW.right - VIEW.left, height: sz(VIEW.z1) - sz(0) });
+  for (let Z = 1; Z <= 4; Z++) {
+    el("line", { class: "grid", x1: VIEW.left, x2: VIEW.right, y1: sz(Z), y2: sz(Z) });
+    el("text", { x: VIEW.left - 6, y: sz(Z) + 3.5, "text-anchor": "end", "font-size": 10 }).textContent = Z;
+  }
+  [-3, -2, -1, 0, 1, 2, 3].forEach(X => {
+    el("line", { class: "grid", x1: sx(X), x2: sx(X), y1: sz(0), y2: sz(VIEW.z1) });
+    el("text", { x: sx(X), y: sz(0) - 26, "text-anchor": "middle", "font-size": 10 }).textContent = Math.abs(X);
+  });
+  el("text", { x: VIEW.left - 6, y: sz(0) - 24, "text-anchor": "end", "font-size": 10 }).textContent = "r/R";
+  el("text", { x: VIEW.left - 6, y: sz(0) + 12, "text-anchor": "end", "font-size": 10 }).textContent = "z/R";
+  const levels = [0.9, 0.7, 0.5, 0.3, 0.2, 0.1];
+  const iso = isobarSegments(levels);
+  const g = el("g", { "clip-path": "url(#plot)" });
+  for (const c of levels) {
+    let d = "";
+    for (const [a, b] of iso[c]) for (const s of [1, -1])
+      d += `M${sx(s * a[0]).toFixed(1)},${sz(a[1]).toFixed(1)}L${sx(s * b[0]).toFixed(1)},${sz(b[1]).toFixed(1)}`;
+    el("path", { class: "iso", d }, g);
+    const zc = 1 / Math.sqrt((1 - c) ** (-2 / 3) - 1);          // depth of the isobar under the centre
+    if (sz(zc) < VIEW.bottom - 4) el("text", { class: "isolab", x: sx(0) + 3, y: sz(zc) - 3 }).textContent = c;
+  }
+  el("line", { class: "ground", x1: VIEW.left, x2: VIEW.right, y1: sz(0), y2: sz(0) });
+  el("rect", { class: "loadbar", x: sx(-1), y: sz(0) - 4, width: sx(1) - sx(-1), height: 4 });
+  for (let k = -4; k <= 4; k++) {
+    const X = k / 4;
+    el("line", { class: "arrow", x1: sx(X), x2: sx(X), y1: sz(0) - 18, y2: sz(0) - 5 });
+    el("path", { d: `M${sx(X) - 2.5},${sz(0) - 8} L${sx(X)},${sz(0) - 4.5} L${sx(X) + 2.5},${sz(0) - 8}`, fill: "none", class: "arrow" });
+  }
+  el("line", { class: "arrow", x1: sx(-1), x2: sx(1), y1: sz(0) - 18, y2: sz(0) - 18 });
+  el("text", { x: sx(1) + 4, y: sz(0) - 14, "font-size": 11 }).textContent = "q";
+}
+drawStatic();
+const guideV = el("line", { class: "guide" }), guideH = el("line", { class: "guide" });
+const dot = el("circle", { class: "pt", r: 5 });
+
+// ---------- state & inputs ----------
+const $ = id => document.getElementById(id);
+let mode = "m";
+const state = { R: 2, r: 1, z: 2, q: 100, X: 0.5, Z: 1, side: 1 };   // side: which half of the sketch the point is drawn in
+const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+
+function readInputs() {
+  if (mode === "m") {
+    state.R = Math.max(0.01, num($("R").value, state.R));
+    state.r = Math.abs(num($("r").value, state.r));
+    state.z = Math.max(0, num($("z").value, state.z));
+    state.q = num($("q").value, NaN);
+    state.X = state.r / state.R; state.Z = state.z / state.R;
+  } else {
+    state.X = Math.abs(num($("dX").value, state.X));
+    state.Z = Math.max(0, num($("dZ").value, state.Z));
+    state.q = num($("q2").value, NaN);
+  }
+}
+function writeInputsFromXZ() {
+  $("dX").value = +state.X.toFixed(3); $("dZ").value = +state.Z.toFixed(3);
+  state.r = state.X * state.R; state.z = state.Z * state.R;
+  $("r").value = +state.r.toFixed(3); $("z").value = +state.z.toFixed(3);
+}
+
+const f4 = v => v.toFixed(4);
+function update() {
+  const { X, Z, q } = state;
+  const r = circleStress(X, Z), c = centreStress(Z);
+  $("ratio").textContent = f4(r);
+  const hasQ = isFinite(q) && q > 0;
+  $("kpa").textContent = hasQ ? (r * q).toFixed(2) : "–";
+  $("kpa-unit").hidden = !hasQ; $("kpa-hint").hidden = hasQ;
+  $("xz").textContent = `${X.toFixed(3)}, ${Z.toFixed(3)}`;
+  $("centre").textContent = f4(c);
+  $("share").textContent = c > 0 ? `${(100 * r / c).toFixed(1)} %` : "–";
+  $("note").textContent = Z > 0 ? "" : (X === 1
+    ? "At the surface the load drops from q to 0 at the edge of the circle; 0.5 is the limit approached from below."
+    : "At the surface Δσz equals the applied load: q inside the circle and 0 outside it.");
+  const Xd = state.side * X;
+  const cx = sx(Math.max(VIEW.x0, Math.min(VIEW.x1, Xd))), cz = sz(Math.min(VIEW.z1, Z));
+  dot.setAttribute("cx", cx); dot.setAttribute("cy", cz);
+  guideV.setAttribute("x1", cx); guideV.setAttribute("x2", cx); guideV.setAttribute("y1", sz(0)); guideV.setAttribute("y2", cz);
+  guideH.setAttribute("x1", sx(0)); guideH.setAttribute("x2", cx); guideH.setAttribute("y1", cz); guideH.setAttribute("y2", cz);
+  updateRow(); highlightTable();
+}
+
+// the book table's columns (r/R) and rows (z/R)
+const TX = [0, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10];
+const TZ = [...Array.from({ length: 21 }, (_, i) => i / 10), ...Array.from({ length: 10 }, (_, i) => +(2.2 + 0.2 * i).toFixed(1)),
+            ...Array.from({ length: 12 }, (_, i) => 4.25 + 0.25 * i), ...Array.from({ length: 6 }, (_, i) => 7.5 + 0.5 * i)];
+const fmt = v => String(v);
+function updateRow() {
+  $("row-cap").textContent = `z/R = ${state.Z.toFixed(2)}. Values for the same r/R as the table in the book.`;
+  const box = $("rowlist"); box.textContent = "";
+  for (const X of TX) {
+    const d = document.createElement("div");
+    if (Math.abs(X - state.X) < 1e-6) d.className = "hl";
+    d.innerHTML = `<span>${fmt(X)}</span><span>${f4(circleStress(X, state.Z))}</span>`;
+    box.appendChild(d);
+  }
+}
+(function buildTable() {
+  let h = "<thead><tr><th scope=\"col\">z/R \\ r/R</th>" + TX.map(X => `<th scope="col">${fmt(X)}</th>`).join("") + "</tr></thead><tbody>";
+  for (const Z of TZ) h += `<tr><th scope="row">${fmt(Z)}</th>` + TX.map(X => `<td>${f4(circleStress(X, Z))}</td>`).join("") + "</tr>";
+  $("table").innerHTML = h + "</tbody>";
+})();
+function highlightTable() {
+  const t = $("table");
+  t.querySelectorAll(".hl").forEach(c => c.classList.remove("hl"));
+  const xi = TX.findIndex(X => Math.abs(X - state.X) < 1e-6), zi = TZ.findIndex(Z => Math.abs(Z - state.Z) < 1e-6);
+  if (xi >= 0 && zi >= 0) t.tBodies[0].rows[zi].cells[xi + 1].classList.add("hl");
+}
+
+function setMode(m) {
+  mode = m;
+  $("mode-m").setAttribute("aria-pressed", m === "m"); $("mode-d").setAttribute("aria-pressed", m === "d");
+  $("fields-m").hidden = m !== "m"; $("fields-d").hidden = m !== "d";
+  if (m === "d") { $("dX").value = +state.X.toFixed(3); $("dZ").value = +state.Z.toFixed(3); $("q2").value = $("q").value; }
+  else { $("q").value = $("q2").value; writeInputsFromXZ(); }
+  readInputs(); update();
+}
+$("mode-m").addEventListener("click", () => setMode("m"));
+$("mode-d").addEventListener("click", () => setMode("d"));
+["R", "r", "z", "q", "dX", "dZ", "q2"].forEach(id => $(id).addEventListener("input", () => { readInputs(); update(); }));
+
+function fromPointer(ev) {
+  const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  const s = p.matrixTransform(svg.getScreenCTM().inverse());
+  const X = VIEW.x0 + (s.x - VIEW.left) / (VIEW.right - VIEW.left) * (VIEW.x1 - VIEW.x0);
+  const Z = (s.y - VIEW.top) / (VIEW.bottom - VIEW.top) * VIEW.z1;
+  const Xc = Math.max(VIEW.x0, Math.min(VIEW.x1, X));
+  state.side = Xc < 0 ? -1 : 1;
+  state.X = Math.round(Math.abs(Xc) * 100) / 100;
+  state.Z = Math.round(Math.max(0, Math.min(VIEW.z1, Z)) * 100) / 100;
+  if (mode === "m") state.R = Math.max(0.01, num($("R").value, state.R));
+  writeInputsFromXZ(); update();
+}
+let dragging = false;
+svg.addEventListener("pointerdown", e => { dragging = true; svg.setPointerCapture(e.pointerId); fromPointer(e); });
+svg.addEventListener("pointermove", e => { if (dragging) fromPointer(e); });
+svg.addEventListener("pointerup", () => { dragging = false; });
+svg.addEventListener("pointercancel", () => { dragging = false; });
+
+readInputs(); update();
+</script>
+</body>
+</html>
