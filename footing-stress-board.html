@@ -88,6 +88,7 @@ svg .hit { fill: transparent; }
 
 .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fields .qall { grid-column: 1 / span 2; }
 .field { display: grid; gap: 3px; min-width: 0; }
 .field label { font-size: 0.78rem; color: var(--muted); }
 .field label var { font-family: var(--font-display); font-style: italic; color: var(--ink); font-size: 0.95rem; }
@@ -103,7 +104,9 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3
 .presets button { font: 500 0.78rem var(--font-body); padding: 3px 9px; border: 1px solid var(--rule); border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
 .presets button:hover { border-color: var(--accent); color: var(--accent); }
 
-.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.results .res:not(.primary) { padding: 8px 9px; }
+.results .res:not(.primary) .val { font-size: 1.1rem; }
 .res { display: grid; gap: 3px; align-content: start; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 8px; min-width: 0; }
 .res .lbl { font-family: var(--font-display); font-style: italic; font-size: 0.95rem; color: var(--muted); }
 .res .val { font: 500 1.2rem/1.1 var(--font-data); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -114,8 +117,8 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3
 .res .sub { font-size: 0.75rem; color: var(--muted); }
 
 .scroll { overflow-x: auto; max-width: 100%; }
-table { border-collapse: collapse; font: 0.8rem var(--font-data); font-variant-numeric: tabular-nums; width: 100%; }
-th, td { padding: 4px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+table { border-collapse: collapse; font: 0.76rem var(--font-data); font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 4px 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
 th { color: var(--muted); font-weight: 500; }
 th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
 tbody tr { cursor: pointer; }
@@ -198,12 +201,14 @@ summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); 
         <div class="field"><label for="px">Point <var>x</var></label><div class="inp"><input id="px" type="number" step="0.1" inputmode="decimal"><span class="unit">m</span></div></div>
         <div class="field"><label for="py">Point <var>y</var></label><div class="inp"><input id="py" type="number" step="0.1" inputmode="decimal"><span class="unit">m</span></div></div>
         <div class="field"><label for="pz">Depth <var>z</var></label><div class="inp"><input id="pz" type="number" step="0.1" min="0" inputmode="decimal"><span class="unit">m</span></div></div>
+        <div class="field qall"><label for="qall">Load <var>q</var> (all footings)</label><div class="inp"><input id="qall" type="number" step="10" inputmode="decimal" placeholder="varies"><span class="unit">kPa</span></div></div>
       </div>
 
       <div class="results" aria-live="polite">
         <div class="res primary"><span class="lbl">Δσ<sub>z</sub> at <span style="font-style:italic">P</span></span><span class="val"><span id="rk">0</span><span class="unit">kPa</span></span></div>
         <div class="res"><span class="lbl">I = Δσ<sub>z</sub>/q</span><span class="val" id="ri">0</span><span class="sub" id="riSub"></span></div>
-        <div class="res"><span class="lbl">Newmark blocks</span><span class="val" id="rn">0</span><span class="sub">N = I / 0.005</span></div>
+        <div class="res"><span class="lbl">Newmark <var style="font-style:italic">N</var></span><span class="val" id="rn">0</span><span class="sub">= I / 0.005</span></div>
+        <div class="res"><span class="lbl">Loaded area</span><span class="val"><span id="rarea">0</span><span class="unit">m²</span></span><span class="sub" id="rareaSub"></span></div>
       </div>
 
       <div id="editor" class="panel" style="padding:12px; background: var(--bg)" hidden>
@@ -534,7 +539,7 @@ function results() {
   const qs = shapes.filter(s => s.mode !== "sub").map(s => s.q), same = qs.length && qs.every(q => q === qs[0]) && qs[0] !== 0 && !shapes.some(s => s.mode === "sup");
   const I = same ? tot / qs[0] : NaN;
   $("ri").textContent = same ? fmt(I, 4) : "—";
-  $("riSub").textContent = same ? `q = ${r3(qs[0])} kPa` : (qs.length ? "Loads differ or are superposed: see the table" : "");
+  $("riSub").textContent = same ? "" : (qs.length ? "loads differ" : "");
   $("rn").textContent = same ? fmt(I / 0.005, 1) : "—";
   const tb = $("tb"); tb.textContent = "";
   for (const r of rs) {
@@ -548,12 +553,19 @@ function results() {
   }
   $("tt").textContent = fmt(tot);
   $("ta").textContent = fmt(rs.reduce((a, r) => a + (r.s.mode === "sub" ? 0 : r.A), 0), 2);
+  // footprint: area of the union of all loaded regions (superposed overlaps counted once)
+  let foot = 0;
+  try { const mps = layers(512).filter(l => l.mp && l.mp.length).map(l => l.mp); foot = mps.length ? mpArea(PC.union(...mps)) : 0; } catch (e) { foot = rs.reduce((a, r) => a + (r.s.mode === "sub" ? 0 : r.A), 0); }
+  $("rarea").textContent = fmt(foot, 2);
+  const nLoaded = shapes.filter(s => s.mode !== "sub").length;
+  $("rareaSub").textContent = nLoaded > 1 ? `${nLoaded} footings` : "";
   $("emptyMsg").hidden = shapes.length > 0;
 }
 function syncInputs() {
   if (document.activeElement !== $("px")) $("px").value = r3(P.x);
   if (document.activeElement !== $("py")) $("py").value = r3(P.y);
   if (document.activeElement !== $("pz")) $("pz").value = r3(Z);
+  if (document.activeElement !== $("qall")) { const qs = shapes.filter(t => t.mode !== "sub").map(t => t.q); $("qall").value = !qs.length ? r3(lastQ) : qs.every(q => q === qs[0]) ? r3(qs[0]) : ""; }
   const s = shapes.find(t => t.id === selId);
   $("editor").hidden = !s; $("del").disabled = !s; $("clear").disabled = !shapes.length;
   if (!s) return;
@@ -752,6 +764,7 @@ function numIn(id, fn) {
   e.addEventListener("input", () => { const v = parseFloat(e.value); if (isFinite(v)) { fn(v); updateAll(); } });
   e.addEventListener("blur", () => updateAll());
 }
+numIn("qall", v => { lastQ = v; for (const t of shapes) if (t.mode !== "sub") t.q = v; });
 numIn("px", v => P.x = v); numIn("py", v => P.y = v); numIn("pz", v => Z = Math.max(0, v));
 const selS = () => shapes.find(t => t.id === selId);
 numIn("eq", v => { const s = selS(); if (s) { s.q = v; lastQ = v; } });
