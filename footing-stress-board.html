@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Footing Stress Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: drawing board (plan) on the left, point/depth inputs and results on the right; depth profile below. Stacks on phones. */
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2330; --muted: #5b6676; --rule: #d9dee6;
+  --grid: #e7eaef; --accent: #1f4fbf; --accent-soft: #e6ecfa; --soil: #eef0f3;
+  --load: #8a94a3; --point: #c2410c; --neg: #b42318;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #232a35;
+    --accent: #8fb0ff; --accent-soft: #1f2b44; --soil: #1e2530; --load: #7d8898; --point: #fb923c; --neg: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #232a35;
+  --accent: #8fb0ff; --accent-soft: #1f2b44; --soil: #1e2530; --load: #7d8898; --point: #fb923c; --neg: #ff8a80;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); padding-inline: 16px; padding-block: 16px 28px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel > * { min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+h2 { font: 600 0.95rem var(--font-body); margin: 0; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 0.8rem var(--font-body); padding: 6px 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button + button { border-left: 1px solid var(--rule); }
+.btn { font: 500 0.8rem var(--font-body); padding: 5px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn.danger:hover:not(:disabled) { border-color: var(--neg); color: var(--neg); }
+.opts { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.opts label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.opts select { font: 0.8rem var(--font-data); background: var(--bg); color: var(--ink); border: 1px solid var(--rule); border-radius: 5px; padding: 2px 4px; }
+.opts input[type=checkbox] { accent-color: var(--accent); }
+
+.board { position: relative; }
+.board svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; -webkit-user-select: none; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
+.board svg.t-select { cursor: default; }
+.board svg.t-draw { cursor: crosshair; }
+.board svg.panning { cursor: grabbing; }
+.drawbar { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; align-items: center; font-size: 0.78rem; color: var(--muted); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 4px 6px; }
+.cap { font-size: 0.8rem; color: var(--muted); margin: 0; }
+
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .gminor { stroke: var(--grid); stroke-width: 1; }
+svg .gmajor { stroke: var(--rule); stroke-width: 1; }
+svg .gaxis { stroke: var(--muted); stroke-width: 1; opacity: 0.6; }
+svg .tick { font: 10px var(--font-data); fill: var(--muted); }
+svg .eff { fill: var(--load); fill-opacity: 0.34; fill-rule: evenodd; stroke: none; }
+svg .eff.neg { fill: var(--neg); fill-opacity: 0.14; }
+svg .shape { fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
+svg .shape.sup { stroke-dasharray: 2 3; }
+svg .shape.sub { stroke: var(--neg); stroke-dasharray: 6 4; }
+svg .shape.sel { stroke: var(--accent); stroke-width: 2.5; }
+svg .slab { font: 600 11px var(--font-data); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+svg .handle { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+svg .draft { fill: var(--accent); fill-opacity: 0.08; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+svg .draftv { fill: var(--accent); }
+svg .first { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+svg .iso { fill: none; stroke: var(--accent); stroke-width: 1.3; opacity: 0.85; }
+svg .isolab { font: 500 10px var(--font-data); fill: var(--accent); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; }
+svg .nm { fill: none; stroke: var(--point); stroke-width: 0.9; opacity: 0.55; }
+svg .pt { fill: var(--point); stroke: var(--panel); stroke-width: 2; }
+svg .ptlab { font: 600 12px var(--font-display); font-style: italic; fill: var(--point); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+svg .hit { fill: transparent; }
+
+.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field { display: grid; gap: 3px; min-width: 0; }
+.field label { font-size: 0.78rem; color: var(--muted); }
+.field label var { font-family: var(--font-display); font-style: italic; color: var(--ink); font-size: 0.95rem; }
+.inp { min-width: 0; display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 0.95rem var(--font-data); padding: 7px 8px; font-variant-numeric: tabular-nums; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 8px; color: var(--muted); font-size: 0.8rem; }
+textarea { width: 100%; box-sizing: border-box; min-height: 92px; font: 0.85rem/1.4 var(--font-data); color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.hint { font-size: 0.78rem; color: var(--muted); margin: 0; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.presets button { font: 500 0.78rem var(--font-body); padding: 3px 9px; border: 1px solid var(--rule); border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.presets button:hover { border-color: var(--accent); color: var(--accent); }
+
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.res { display: grid; gap: 3px; align-content: start; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 8px; min-width: 0; }
+.res .lbl { font-family: var(--font-display); font-style: italic; font-size: 0.95rem; color: var(--muted); }
+.res .val { font: 500 1.2rem/1.1 var(--font-data); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.res.primary { grid-column: 1 / -1; background: var(--accent-soft); border-color: var(--accent); }
+.res.primary .lbl { color: var(--accent); }
+.res.primary .val { font-size: clamp(1.6rem, 4vw, 2.1rem); color: var(--accent); }
+.res .unit { font-size: 0.55em; margin-left: 4px; }
+.res .sub { font-size: 0.75rem; color: var(--muted); }
+
+.scroll { overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; font: 0.8rem var(--font-data); font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 4px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th { color: var(--muted); font-weight: 500; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--bg); }
+tbody tr.sel td { background: var(--accent-soft); color: var(--accent); }
+tfoot td { border-bottom: 0; font-weight: 600; }
+td.mode-sub { color: var(--neg); }
+.rowbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+.empty { font-size: 0.82rem; color: var(--muted); margin: 0; }
+
+.prof svg { width: 100%; height: auto; display: block; touch-action: none; }
+.prof .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.prof .ax { stroke: var(--muted); stroke-width: 1; }
+.prof .gl { stroke: var(--grid); stroke-width: 1; }
+.prof .zero { stroke: var(--rule); stroke-width: 1; }
+.prof .cur { stroke: var(--point); stroke-width: 1; stroke-dasharray: 3 3; }
+.prof .curpt { fill: var(--point); stroke: var(--panel); stroke-width: 2; }
+.prof .hov { stroke: var(--muted); stroke-width: 1; }
+.prof .hovpt { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.prof .tip { font: 11px var(--font-data); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.prof .axlab { font: italic 12px var(--font-display); fill: var(--muted); }
+
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 10px; font-size: 0.88rem; max-width: 80ch; }
+.dbody p { margin: 0; }
+.eq { font-family: var(--font-display); font-size: 1rem; text-align: center; padding: 6px 0; overflow-x: auto; }
+.eq var, .dbody var { font-family: var(--font-display); font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Vertical stress under footings of any shape</h1>
+    <p class="lede">Draw one or more uniformly loaded footings on the plan, then place the point <var>P</var> and choose the depth. The stress increase is found by integrating the Boussinesq solution over each footing, so this replaces Newmark's influence chart.</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="Drawing board">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Tool">
+          <button data-tool="select" aria-pressed="true" title="Select, move and reshape footings; drag empty space to pan (V)">Select</button>
+          <button data-tool="rect" aria-pressed="false" title="Drag to draw a rectangle (R)">Rectangle</button>
+          <button data-tool="circle" aria-pressed="false" title="Drag from the centre to draw a circle (C)">Circle</button>
+          <button data-tool="poly" aria-pressed="false" title="Click the corners, then click the first corner to close (G)">Polygon</button>
+        </div>
+        <div class="seg" role="group" aria-label="New shapes">
+          <button data-newmode="add" aria-pressed="true" title="New shapes add load, merging with shapes below (A)">Add</button>
+          <button data-newmode="sub" aria-pressed="false" title="New shapes cut holes in the load below (S)">Subtract</button>
+        </div>
+        <button class="btn" id="undo" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="btn danger" id="del" title="Delete the selected footing (Delete)">Delete</button>
+        <button class="btn danger" id="clear">Clear all</button>
+      </div>
+      <div class="opts">
+        <label>Snap <select id="snap"><option value="0">off</option><option value="0.1">0.1 m</option><option value="0.25">0.25 m</option><option value="0.5" selected>0.5 m</option><option value="1">1 m</option></select></label>
+        <label>Board width <select id="bw"><option>5</option><option>10</option><option selected>15</option><option>20</option><option>30</option><option>50</option><option>80</option><option>120</option></select> m</label>
+        <button class="btn" id="fit">Fit</button>
+        <label><input type="checkbox" id="showMap" checked> Stress contours at depth <var>z</var></label>
+        <label><input type="checkbox" id="showNm"> Newmark chart at <var>P</var></label>
+      </div>
+      <div class="board">
+        <svg id="svg" viewBox="0 0 600 450" class="t-select" role="img" aria-label="Plan view drawing board with footings and the point P"></svg>
+        <div class="drawbar" id="drawbar" hidden><span id="drawmsg">Click the corners.</span><button class="btn primary" id="finish">Finish</button><button class="btn" id="cancel">Cancel</button></div>
+      </div>
+      <p class="cap" id="cap">Plan view, coordinates in metres. Drag <var>P</var> to move the point. In Select mode, drag a footing to move it, drag its handles to reshape it, and drag empty space to pan. Contours show Δσ<sub>z</sub> across the plan at the chosen depth.</p>
+    </section>
+
+    <section class="panel" aria-label="Inputs and results">
+      <div class="presets"><span>Examples:</span>
+        <button data-preset="rect">Rectangle</button>
+        <button data-preset="L">L-shaped raft</button>
+        <button data-preset="tank">Circular tank</button>
+        <button data-preset="pads">Strip and pads</button>
+        <button data-preset="opening">Raft with opening</button>
+      </div>
+      <div class="fields">
+        <div class="field"><label for="px">Point <var>x</var></label><div class="inp"><input id="px" type="number" step="0.1" inputmode="decimal"><span class="unit">m</span></div></div>
+        <div class="field"><label for="py">Point <var>y</var></label><div class="inp"><input id="py" type="number" step="0.1" inputmode="decimal"><span class="unit">m</span></div></div>
+        <div class="field"><label for="pz">Depth <var>z</var></label><div class="inp"><input id="pz" type="number" step="0.1" min="0" inputmode="decimal"><span class="unit">m</span></div></div>
+      </div>
+
+      <div class="results" aria-live="polite">
+        <div class="res primary"><span class="lbl">Δσ<sub>z</sub> at <span style="font-style:italic">P</span></span><span class="val"><span id="rk">0</span><span class="unit">kPa</span></span></div>
+        <div class="res"><span class="lbl">I = Δσ<sub>z</sub>/q</span><span class="val" id="ri">0</span><span class="sub" id="riSub"></span></div>
+        <div class="res"><span class="lbl">Newmark blocks</span><span class="val" id="rn">0</span><span class="sub">N = I / 0.005</span></div>
+      </div>
+
+      <div id="editor" class="panel" style="padding:12px; background: var(--bg)" hidden>
+        <h2 id="edTitle">Footing</h2>
+        <div class="seg" role="group" aria-label="How this shape combines with the shapes below it" id="emode">
+          <button data-mode="add" title="Loaded with q; replaces any load below it, so overlapping shapes merge">Add</button>
+          <button data-mode="sub" title="Removes all load below it">Subtract</button>
+          <button data-mode="sup" title="Adds q on top of any load below it">Superpose</button>
+        </div>
+        <p class="hint" id="modeHint"></p>
+        <div class="fields two" id="edQ">
+          <div class="field"><label for="eq">Load <var>q</var></label><div class="inp"><input id="eq" type="number" step="10" inputmode="decimal"><span class="unit">kPa</span></div></div>
+        </div>
+        <div class="fields two" id="edRect">
+          <div class="field"><label for="ex">Corner <var>x</var></label><div class="inp"><input id="ex" type="number" step="0.1"><span class="unit">m</span></div></div>
+          <div class="field"><label for="ey">Corner <var>y</var></label><div class="inp"><input id="ey" type="number" step="0.1"><span class="unit">m</span></div></div>
+          <div class="field"><label for="eB">Width <var>B</var></label><div class="inp"><input id="eB" type="number" step="0.1" min="0.01"><span class="unit">m</span></div></div>
+          <div class="field"><label for="eL">Length <var>L</var></label><div class="inp"><input id="eL" type="number" step="0.1" min="0.01"><span class="unit">m</span></div></div>
+        </div>
+        <div class="fields two" id="edCirc">
+          <div class="field"><label for="ecx">Centre <var>x</var></label><div class="inp"><input id="ecx" type="number" step="0.1"><span class="unit">m</span></div></div>
+          <div class="field"><label for="ecy">Centre <var>y</var></label><div class="inp"><input id="ecy" type="number" step="0.1"><span class="unit">m</span></div></div>
+          <div class="field"><label for="eR">Radius <var>R</var></label><div class="inp"><input id="eR" type="number" step="0.1" min="0.01"><span class="unit">m</span></div></div>
+        </div>
+        <div id="edPoly" class="field">
+          <label for="ept">Corners, one <var>x</var>, <var>y</var> pair per line (m)</label>
+          <textarea id="ept" spellcheck="false"></textarea>
+          <p class="hint" id="eptMsg">Edit and click outside the box to apply.</p>
+        </div>
+        <div class="rowbtns"><button class="btn" id="up" title="Move this shape above the next one">Bring forward</button><button class="btn" id="down" title="Move this shape below the previous one">Send backward</button></div>
+        <p class="hint">Shapes are applied in table order, so a shape lower in the table sits on top. A negative <var>q</var> models unloading, such as an excavation.</p>
+      </div>
+
+      <div>
+        <h2 style="margin-bottom:6px">Footings</h2>
+        <div class="scroll"><table>
+          <thead><tr><th>#</th><th>Shape</th><th title="Loaded area after the shapes are combined">Area (m²)</th><th>q (kPa)</th><th>I</th><th>Δσ<sub>z</sub> (kPa)</th></tr></thead>
+          <tbody id="tb"></tbody>
+          <tfoot><tr><td></td><td>Total</td><td id="ta"></td><td></td><td></td><td id="tt">0.00</td></tr></tfoot>
+        </table></div>
+        <p class="empty" id="emptyMsg" hidden>No footings yet. Pick Rectangle, Circle or Polygon and draw on the board.</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel prof" aria-label="Stress increase with depth below P">
+    <h2>Δσ<sub>z</sub> with depth below <var style="font-family:var(--font-display)">P</var></h2>
+    <svg id="prof" viewBox="0 0 640 250" role="img" aria-label="Stress increase versus depth at the point P"></svg>
+  </section>
+
+  <details>
+    <summary>How the stress is calculated</summary>
+    <div class="dbody">
+      <p>Boussinesq's solution for a point load is integrated over each loaded area. Seen from the point <var>P</var>, a thin wedge of the footing between angles <var>θ</var> and <var>θ</var> + d<var>θ</var>, reaching out to a distance <var>R</var>(<var>θ</var>), adds</p>
+      <p class="eq">dσ<sub>z</sub> = (<var>q</var> / 2π) [1 − (1 + <var>R</var>²/<var>z</var>²)<sup>−3/2</sup>] d<var>θ</var></p>
+      <p>This is the same wedge idea Newmark used to build his chart. Going round the boundary of the footing and adding these wedges (with sign, so that points outside the footing and re-entrant corners are handled automatically) gives Δσ<sub>z</sub>. For a straight edge at perpendicular distance <var>h</var> from <var>P</var>, the integral has a closed form, so the result for any polygon is exact. With <var>a</var> = <var>h</var>/<var>z</var>, <var>c</var>² = 1 + <var>a</var>² and <var>φ</var> the angle measured from the perpendicular to the edge,</p>
+      <p class="eq">∫ [1 − (1 + <var>R</var>²/<var>z</var>²)<sup>−3/2</sup>] d<var>φ</var> = <var>φ</var> − sin<sup>−1</sup>(sin <var>φ</var> / <var>c</var>) + <var>a</var>² sin <var>φ</var> / (<var>c</var>² √(<var>c</var>² − sin² <var>φ</var>))</p>
+      <p>Circles are treated as regular polygons with 512 sides, which changes the result by less than 0.001 %. For a rectangle the result matches the corner-factor formula exactly.</p>
+      <p>Shapes are combined in order, like layers. An <em>Add</em> shape is loaded with its <var>q</var> and replaces whatever load lies below it, so overlapping shapes merge into one footing instead of being loaded twice. A <em>Subtract</em> shape removes all load below it, leaving a hole. A <em>Superpose</em> shape adds its <var>q</var> to the load below, which is useful for a column load on top of a raft. The boundaries of the resulting loaded regions, including the edges of any holes, are found by polygon clipping, and the edge sum above is taken round every one of them. A hole's edges run the opposite way, so they subtract automatically.</p>
+      <p>The Newmark overlay draws the chart for the current depth: rings at <var>R</var>/<var>z</var> = √[(1 − Δσ<sub>z</sub>/<var>q</var>)<sup>−2/3</sup> − 1] for Δσ<sub>z</sub>/<var>q</var> = 0.1, 0.2, … 0.9, and 20 rays, so each block is worth 0.005. Counting blocks inside a footing and multiplying by 0.005 approximates the influence factor <var>I</var> that the calculator gives exactly.</p>
+    </div>
+  </details>
+</div>
+
+<script>
+/* polygon-clipping v0.15.7, MIT licence, (c) Mike Fogel — https://github.com/mfogel/polygon-clipping */
+!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof globalThis?globalThis:t||self).polygonClipping=e()}(this,(function(){"use strict";
+/**
+     * splaytree v3.1.2
+     * Fast Splay tree for Node and browser
+     *
+     * @author Alexander Milevski <info@w8r.name>
+     * @license MIT
+     * @preserve
+     */
+/*! *****************************************************************************
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+    this file except in compliance with the License. You may obtain a copy of the
+    License at http://www.apache.org/licenses/LICENSE-2.0
+
+    THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+    WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+    MERCHANTABLITY OR NON-INFRINGEMENT.
+
+    See the Apache Version 2.0 License for specific language governing permissions
+    and limitations under the License.
+    ***************************************************************************** */function t(t,e){var n,r,i,o,s={label:0,sent:function(){if(1&i[0])throw i[1];return i[1]},trys:[],ops:[]};return o={next:l(0),throw:l(1),return:l(2)},"function"==typeof Symbol&&(o[Symbol.iterator]=function(){return this}),o;function l(o){return function(l){return function(o){if(n)throw new TypeError("Generator is already executing.");for(;s;)try{if(n=1,r&&(i=2&o[0]?r.return:o[0]?r.throw||((i=r.return)&&i.call(r),0):r.next)&&!(i=i.call(r,o[1])).done)return i;switch(r=0,i&&(o=[2&o[0],i.value]),o[0]){case 0:case 1:i=o;break;case 4:return s.label++,{value:o[1],done:!1};case 5:s.label++,r=o[1],o=[0];continue;case 7:o=s.ops.pop(),s.trys.pop();continue;default:if(!(i=s.trys,(i=i.length>0&&i[i.length-1])||6!==o[0]&&2!==o[0])){s=0;continue}if(3===o[0]&&(!i||o[1]>i[0]&&o[1]<i[3])){s.label=o[1];break}if(6===o[0]&&s.label<i[1]){s.label=i[1],i=o;break}if(i&&s.label<i[2]){s.label=i[2],s.ops.push(o);break}i[2]&&s.ops.pop(),s.trys.pop();continue}o=e.call(t,s)}catch(t){o=[6,t],r=0}finally{n=i=0}if(5&o[0])throw o[1];return{value:o[0]?o[1]:void 0,done:!0}}([o,l])}}}var e=function(t,e){this.next=null,this.key=t,this.data=e,this.left=null,this.right=null};function n(t,e){return t>e?1:t<e?-1:0}function r(t,n,r){for(var i=new e(null,null),o=i,s=i;;){var l=r(t,n.key);if(l<0){if(null===n.left)break;if(r(t,n.left.key)<0){var h=n.left;if(n.left=h.right,h.right=n,null===(n=h).left)break}s.left=n,s=n,n=n.left}else{if(!(l>0))break;if(null===n.right)break;if(r(t,n.right.key)>0){h=n.right;if(n.right=h.left,h.left=n,null===(n=h).right)break}o.right=n,o=n,n=n.right}}return o.right=n.left,s.left=n.right,n.left=i.right,n.right=i.left,n}function i(t,n,i,o){var s=new e(t,n);if(null===i)return s.left=s.right=null,s;var l=o(t,(i=r(t,i,o)).key);return l<0?(s.left=i.left,s.right=i,i.left=null):l>=0&&(s.right=i.right,s.left=i,i.right=null),s}function o(t,e,n){var i=null,o=null;if(e){var s=n((e=r(t,e,n)).key,t);0===s?(i=e.left,o=e.right):s<0?(o=e.right,e.right=null,i=e):(i=e.left,e.left=null,o=e)}return{left:i,right:o}}function s(t,e,n,r,i){if(t){r(e+(n?"└── ":"├── ")+i(t)+"\n");var o=e+(n?"    ":"│   ");t.left&&s(t.left,o,!1,r,i),t.right&&s(t.right,o,!0,r,i)}}var l=function(){function l(t){void 0===t&&(t=n),this._root=null,this._size=0,this._comparator=t}return l.prototype.insert=function(t,e){return this._size++,this._root=i(t,e,this._root,this._comparator)},l.prototype.add=function(t,n){var i=new e(t,n);null===this._root&&(i.left=i.right=null,this._size++,this._root=i);var o=this._comparator,s=r(t,this._root,o),l=o(t,s.key);return 0===l?this._root=s:(l<0?(i.left=s.left,i.right=s,s.left=null):l>0&&(i.right=s.right,i.left=s,s.right=null),this._size++,this._root=i),this._root},l.prototype.remove=function(t){this._root=this._remove(t,this._root,this._comparator)},l.prototype._remove=function(t,e,n){var i;return null===e?null:0===n(t,(e=r(t,e,n)).key)?(null===e.left?i=e.right:(i=r(t,e.left,n)).right=e.right,this._size--,i):e},l.prototype.pop=function(){var t=this._root;if(t){for(;t.left;)t=t.left;return this._root=r(t.key,this._root,this._comparator),this._root=this._remove(t.key,this._root,this._comparator),{key:t.key,data:t.data}}return null},l.prototype.findStatic=function(t){for(var e=this._root,n=this._comparator;e;){var r=n(t,e.key);if(0===r)return e;e=r<0?e.left:e.right}return null},l.prototype.find=function(t){return this._root&&(this._root=r(t,this._root,this._comparator),0!==this._comparator(t,this._root.key))?null:this._root},l.prototype.contains=function(t){for(var e=this._root,n=this._comparator;e;){var r=n(t,e.key);if(0===r)return!0;e=r<0?e.left:e.right}return!1},l.prototype.forEach=function(t,e){for(var n=this._root,r=[],i=!1;!i;)null!==n?(r.push(n),n=n.left):0!==r.length?(n=r.pop(),t.call(e,n),n=n.right):i=!0;return this},l.prototype.range=function(t,e,n,r){for(var i=[],o=this._comparator,s=this._root;0!==i.length||s;)if(s)i.push(s),s=s.left;else{if(o((s=i.pop()).key,e)>0)break;if(o(s.key,t)>=0&&n.call(r,s))return this;s=s.right}return this},l.prototype.keys=function(){var t=[];return this.forEach((function(e){var n=e.key;return t.push(n)})),t},l.prototype.values=function(){var t=[];return this.forEach((function(e){var n=e.data;return t.push(n)})),t},l.prototype.min=function(){return this._root?this.minNode(this._root).key:null},l.prototype.max=function(){return this._root?this.maxNode(this._root).key:null},l.prototype.minNode=function(t){if(void 0===t&&(t=this._root),t)for(;t.left;)t=t.left;return t},l.prototype.maxNode=function(t){if(void 0===t&&(t=this._root),t)for(;t.right;)t=t.right;return t},l.prototype.at=function(t){for(var e=this._root,n=!1,r=0,i=[];!n;)if(e)i.push(e),e=e.left;else if(i.length>0){if(e=i.pop(),r===t)return e;r++,e=e.right}else n=!0;return null},l.prototype.next=function(t){var e=this._root,n=null;if(t.right){for(n=t.right;n.left;)n=n.left;return n}for(var r=this._comparator;e;){var i=r(t.key,e.key);if(0===i)break;i<0?(n=e,e=e.left):e=e.right}return n},l.prototype.prev=function(t){var e=this._root,n=null;if(null!==t.left){for(n=t.left;n.right;)n=n.right;return n}for(var r=this._comparator;e;){var i=r(t.key,e.key);if(0===i)break;i<0?e=e.left:(n=e,e=e.right)}return n},l.prototype.clear=function(){return this._root=null,this._size=0,this},l.prototype.toList=function(){return function(t){var n=t,r=[],i=!1,o=new e(null,null),s=o;for(;!i;)n?(r.push(n),n=n.left):r.length>0?n=(n=s=s.next=r.pop()).right:i=!0;return s.next=null,o.next}(this._root)},l.prototype.load=function(t,n,r){void 0===n&&(n=[]),void 0===r&&(r=!1);var i=t.length,o=this._comparator;if(r&&f(t,n,0,i-1,o),null===this._root)this._root=h(t,n,0,i),this._size=i;else{var s=function(t,n,r){var i=new e(null,null),o=i,s=t,l=n;for(;null!==s&&null!==l;)r(s.key,l.key)<0?(o.next=s,s=s.next):(o.next=l,l=l.next),o=o.next;null!==s?o.next=s:null!==l&&(o.next=l);return i.next}(this.toList(),function(t,n){for(var r=new e(null,null),i=r,o=0;o<t.length;o++)i=i.next=new e(t[o],n[o]);return i.next=null,r.next}(t,n),o);i=this._size+i,this._root=u({head:s},0,i)}return this},l.prototype.isEmpty=function(){return null===this._root},Object.defineProperty(l.prototype,"size",{get:function(){return this._size},enumerable:!0,configurable:!0}),Object.defineProperty(l.prototype,"root",{get:function(){return this._root},enumerable:!0,configurable:!0}),l.prototype.toString=function(t){void 0===t&&(t=function(t){return String(t.key)});var e=[];return s(this._root,"",!0,(function(t){return e.push(t)}),t),e.join("")},l.prototype.update=function(t,e,n){var s=this._comparator,l=o(t,this._root,s),h=l.left,u=l.right;s(t,e)<0?u=i(e,n,u,s):h=i(e,n,h,s),this._root=function(t,e,n){return null===e?t:(null===t||((e=r(t.key,e,n)).left=t),e)}(h,u,s)},l.prototype.split=function(t){return o(t,this._root,this._comparator)},l.prototype[Symbol.iterator]=function(){var e,n,r;return t(this,(function(t){switch(t.label){case 0:e=this._root,n=[],r=!1,t.label=1;case 1:return r?[3,6]:null===e?[3,2]:(n.push(e),e=e.left,[3,5]);case 2:return 0===n.length?[3,4]:[4,e=n.pop()];case 3:return t.sent(),e=e.right,[3,5];case 4:r=!0,t.label=5;case 5:return[3,1];case 6:return[2]}}))},l}();function h(t,n,r,i){var o=i-r;if(o>0){var s=r+Math.floor(o/2),l=t[s],u=n[s],f=new e(l,u);return f.left=h(t,n,r,s),f.right=h(t,n,s+1,i),f}return null}function u(t,e,n){var r=n-e;if(r>0){var i=e+Math.floor(r/2),o=u(t,e,i),s=t.head;return s.left=o,t.head=t.head.next,s.right=u(t,i+1,n),s}return null}function f(t,e,n,r,i){if(!(n>=r)){for(var o=t[n+r>>1],s=n-1,l=r+1;;){do{s++}while(i(t[s],o)<0);do{l--}while(i(t[l],o)>0);if(s>=l)break;var h=t[s];t[s]=t[l],t[l]=h,h=e[s],e[s]=e[l],e[l]=h}f(t,e,n,l,i),f(t,e,l+1,r,i)}}const c=(t,e)=>t.ll.x<=e.x&&e.x<=t.ur.x&&t.ll.y<=e.y&&e.y<=t.ur.y,p=(t,e)=>{if(e.ur.x<t.ll.x||t.ur.x<e.ll.x||e.ur.y<t.ll.y||t.ur.y<e.ll.y)return null;const n=t.ll.x<e.ll.x?e.ll.x:t.ll.x,r=t.ur.x<e.ur.x?t.ur.x:e.ur.x;return{ll:{x:n,y:t.ll.y<e.ll.y?e.ll.y:t.ll.y},ur:{x:r,y:t.ur.y<e.ur.y?t.ur.y:e.ur.y}}};let g=Number.EPSILON;void 0===g&&(g=Math.pow(2,-52));const a=g*g,y=(t,e)=>{if(-g<t&&t<g&&-g<e&&e<g)return 0;const n=t-e;return n*n<a*t*e?0:t<e?-1:1};class x{constructor(){this.tree=new l,this.round(0)}round(t){const e=this.tree.add(t),n=this.tree.prev(e);if(null!==n&&0===y(e.key,n.key))return this.tree.remove(t),n.key;const r=this.tree.next(e);return null!==r&&0===y(e.key,r.key)?(this.tree.remove(t),r.key):t}}const b=new class{constructor(){this.reset()}reset(){this.xRounder=new x,this.yRounder=new x}round(t,e){return{x:this.xRounder.round(t),y:this.yRounder.round(e)}}},v=11102230246251565e-32,d=134217729,m=(3+8*v)*v;function E(t,e,n,r,i){let o,s,l,h,u=e[0],f=r[0],c=0,p=0;f>u==f>-u?(o=u,u=e[++c]):(o=f,f=r[++p]);let g=0;if(c<t&&p<n)for(f>u==f>-u?(s=u+o,l=o-(s-u),u=e[++c]):(s=f+o,l=o-(s-f),f=r[++p]),o=s,0!==l&&(i[g++]=l);c<t&&p<n;)f>u==f>-u?(s=o+u,h=s-o,l=o-(s-h)+(u-h),u=e[++c]):(s=o+f,h=s-o,l=o-(s-h)+(f-h),f=r[++p]),o=s,0!==l&&(i[g++]=l);for(;c<t;)s=o+u,h=s-o,l=o-(s-h)+(u-h),u=e[++c],o=s,0!==l&&(i[g++]=l);for(;p<n;)s=o+f,h=s-o,l=o-(s-h)+(f-h),f=r[++p],o=s,0!==l&&(i[g++]=l);return 0===o&&0!==g||(i[g++]=o),g}function S(t){return new Float64Array(t)}const _=22204460492503146e-32,w=11093356479670487e-47,k=S(4),R=S(8),I=S(12),P=S(16),N=S(4);function A(t,e,n,r,i,o){const s=(e-o)*(n-i),l=(t-i)*(r-o),h=s-l,u=Math.abs(s+l);return Math.abs(h)>=33306690738754716e-32*u?h:-function(t,e,n,r,i,o,s){let l,h,u,f,c,p,g,a,y,x,b,v,S,A,O,L,$,M;const z=t-i,B=n-i,G=e-o,T=r-o;A=z*T,p=d*z,g=p-(p-z),a=z-g,p=d*T,y=p-(p-T),x=T-y,O=a*x-(A-g*y-a*y-g*x),L=G*B,p=d*G,g=p-(p-G),a=G-g,p=d*B,y=p-(p-B),x=B-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,k[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,k[1]=S-(b+c)+(c-L),M=v+b,c=M-v,k[2]=v-(M-c)+(b-c),k[3]=M;let q=function(t,e){let n=e[0];for(let r=1;r<t;r++)n+=e[r];return n}(4,k),C=_*s;if(q>=C||-q>=C)return q;if(c=t-z,l=t-(z+c)+(c-i),c=n-B,u=n-(B+c)+(c-i),c=e-G,h=e-(G+c)+(c-o),c=r-T,f=r-(T+c)+(c-o),0===l&&0===h&&0===u&&0===f)return q;if(C=w*s+m*Math.abs(q),q+=z*f+T*l-(G*u+B*h),q>=C||-q>=C)return q;A=l*T,p=d*l,g=p-(p-l),a=l-g,p=d*T,y=p-(p-T),x=T-y,O=a*x-(A-g*y-a*y-g*x),L=h*B,p=d*h,g=p-(p-h),a=h-g,p=d*B,y=p-(p-B),x=B-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,N[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,N[1]=S-(b+c)+(c-L),M=v+b,c=M-v,N[2]=v-(M-c)+(b-c),N[3]=M;const F=E(4,k,4,N,R);A=z*f,p=d*z,g=p-(p-z),a=z-g,p=d*f,y=p-(p-f),x=f-y,O=a*x-(A-g*y-a*y-g*x),L=G*u,p=d*G,g=p-(p-G),a=G-g,p=d*u,y=p-(p-u),x=u-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,N[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,N[1]=S-(b+c)+(c-L),M=v+b,c=M-v,N[2]=v-(M-c)+(b-c),N[3]=M;const j=E(F,R,4,N,I);A=l*f,p=d*l,g=p-(p-l),a=l-g,p=d*f,y=p-(p-f),x=f-y,O=a*x-(A-g*y-a*y-g*x),L=h*u,p=d*h,g=p-(p-h),a=h-g,p=d*u,y=p-(p-u),x=u-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,N[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,N[1]=S-(b+c)+(c-L),M=v+b,c=M-v,N[2]=v-(M-c)+(b-c),N[3]=M;const U=E(j,I,4,N,P);return P[U-1]}(t,e,n,r,i,o,u)}const O=(t,e)=>t.x*e.y-t.y*e.x,L=(t,e)=>t.x*e.x+t.y*e.y,$=(t,e,n)=>{const r=A(t.x,t.y,e.x,e.y,n.x,n.y);return r>0?-1:r<0?1:0},M=t=>Math.sqrt(L(t,t)),z=(t,e,n)=>{const r={x:e.x-t.x,y:e.y-t.y},i={x:n.x-t.x,y:n.y-t.y};return O(i,r)/M(i)/M(r)},B=(t,e,n)=>{const r={x:e.x-t.x,y:e.y-t.y},i={x:n.x-t.x,y:n.y-t.y};return L(i,r)/M(i)/M(r)},G=(t,e,n)=>0===e.y?null:{x:t.x+e.x/e.y*(n-t.y),y:n},T=(t,e,n)=>0===e.x?null:{x:n,y:t.y+e.y/e.x*(n-t.x)};class q{static compare(t,e){const n=q.comparePoints(t.point,e.point);return 0!==n?n:(t.point!==e.point&&t.link(e),t.isLeft!==e.isLeft?t.isLeft?1:-1:F.compare(t.segment,e.segment))}static comparePoints(t,e){return t.x<e.x?-1:t.x>e.x?1:t.y<e.y?-1:t.y>e.y?1:0}constructor(t,e){void 0===t.events?t.events=[this]:t.events.push(this),this.point=t,this.isLeft=e}link(t){if(t.point===this.point)throw new Error("Tried to link already linked events");const e=t.point.events;for(let t=0,n=e.length;t<n;t++){const n=e[t];this.point.events.push(n),n.point=this.point}this.checkForConsuming()}checkForConsuming(){const t=this.point.events.length;for(let e=0;e<t;e++){const n=this.point.events[e];if(void 0===n.segment.consumedBy)for(let r=e+1;r<t;r++){const t=this.point.events[r];void 0===t.consumedBy&&(n.otherSE.point.events===t.otherSE.point.events&&n.segment.consume(t.segment))}}}getAvailableLinkedEvents(){const t=[];for(let e=0,n=this.point.events.length;e<n;e++){const n=this.point.events[e];n!==this&&!n.segment.ringOut&&n.segment.isInResult()&&t.push(n)}return t}getLeftmostComparator(t){const e=new Map,n=n=>{const r=n.otherSE;e.set(n,{sine:z(this.point,t.point,r.point),cosine:B(this.point,t.point,r.point)})};return(t,r)=>{e.has(t)||n(t),e.has(r)||n(r);const{sine:i,cosine:o}=e.get(t),{sine:s,cosine:l}=e.get(r);return i>=0&&s>=0?o<l?1:o>l?-1:0:i<0&&s<0?o<l?-1:o>l?1:0:s<i?-1:s>i?1:0}}}let C=0;class F{static compare(t,e){const n=t.leftSE.point.x,r=e.leftSE.point.x,i=t.rightSE.point.x,o=e.rightSE.point.x;if(o<n)return 1;if(i<r)return-1;const s=t.leftSE.point.y,l=e.leftSE.point.y,h=t.rightSE.point.y,u=e.rightSE.point.y;if(n<r){if(l<s&&l<h)return 1;if(l>s&&l>h)return-1;const n=t.comparePoint(e.leftSE.point);if(n<0)return 1;if(n>0)return-1;const r=e.comparePoint(t.rightSE.point);return 0!==r?r:-1}if(n>r){if(s<l&&s<u)return-1;if(s>l&&s>u)return 1;const n=e.comparePoint(t.leftSE.point);if(0!==n)return n;const r=t.comparePoint(e.rightSE.point);return r<0?1:r>0?-1:1}if(s<l)return-1;if(s>l)return 1;if(i<o){const n=e.comparePoint(t.rightSE.point);if(0!==n)return n}if(i>o){const n=t.comparePoint(e.rightSE.point);if(n<0)return 1;if(n>0)return-1}if(i!==o){const t=h-s,e=i-n,f=u-l,c=o-r;if(t>e&&f<c)return 1;if(t<e&&f>c)return-1}return i>o?1:i<o||h<u?-1:h>u?1:t.id<e.id?-1:t.id>e.id?1:0}constructor(t,e,n,r){this.id=++C,this.leftSE=t,t.segment=this,t.otherSE=e,this.rightSE=e,e.segment=this,e.otherSE=t,this.rings=n,this.windings=r}static fromRing(t,e,n){let r,i,o;const s=q.comparePoints(t,e);if(s<0)r=t,i=e,o=1;else{if(!(s>0))throw new Error(`Tried to create degenerate segment at [${t.x}, ${t.y}]`);r=e,i=t,o=-1}const l=new q(r,!0),h=new q(i,!1);return new F(l,h,[n],[o])}replaceRightSE(t){this.rightSE=t,this.rightSE.segment=this,this.rightSE.otherSE=this.leftSE,this.leftSE.otherSE=this.rightSE}bbox(){const t=this.leftSE.point.y,e=this.rightSE.point.y;return{ll:{x:this.leftSE.point.x,y:t<e?t:e},ur:{x:this.rightSE.point.x,y:t>e?t:e}}}vector(){return{x:this.rightSE.point.x-this.leftSE.point.x,y:this.rightSE.point.y-this.leftSE.point.y}}isAnEndpoint(t){return t.x===this.leftSE.point.x&&t.y===this.leftSE.point.y||t.x===this.rightSE.point.x&&t.y===this.rightSE.point.y}comparePoint(t){if(this.isAnEndpoint(t))return 0;const e=this.leftSE.point,n=this.rightSE.point,r=this.vector();if(e.x===n.x)return t.x===e.x?0:t.x<e.x?1:-1;const i=(t.y-e.y)/r.y,o=e.x+i*r.x;if(t.x===o)return 0;const s=(t.x-e.x)/r.x,l=e.y+s*r.y;return t.y===l?0:t.y<l?-1:1}getIntersection(t){const e=this.bbox(),n=t.bbox(),r=p(e,n);if(null===r)return null;const i=this.leftSE.point,o=this.rightSE.point,s=t.leftSE.point,l=t.rightSE.point,h=c(e,s)&&0===this.comparePoint(s),u=c(n,i)&&0===t.comparePoint(i),f=c(e,l)&&0===this.comparePoint(l),g=c(n,o)&&0===t.comparePoint(o);if(u&&h)return g&&!f?o:!g&&f?l:null;if(u)return f&&i.x===l.x&&i.y===l.y?null:i;if(h)return g&&o.x===s.x&&o.y===s.y?null:s;if(g&&f)return null;if(g)return o;if(f)return l;const a=((t,e,n,r)=>{if(0===e.x)return T(n,r,t.x);if(0===r.x)return T(t,e,n.x);if(0===e.y)return G(n,r,t.y);if(0===r.y)return G(t,e,n.y);const i=O(e,r);if(0==i)return null;const o={x:n.x-t.x,y:n.y-t.y},s=O(o,e)/i,l=O(o,r)/i;return{x:(t.x+l*e.x+(n.x+s*r.x))/2,y:(t.y+l*e.y+(n.y+s*r.y))/2}})(i,this.vector(),s,t.vector());return null===a?null:c(r,a)?b.round(a.x,a.y):null}split(t){const e=[],n=void 0!==t.events,r=new q(t,!0),i=new q(t,!1),o=this.rightSE;this.replaceRightSE(i),e.push(i),e.push(r);const s=new F(r,o,this.rings.slice(),this.windings.slice());return q.comparePoints(s.leftSE.point,s.rightSE.point)>0&&s.swapEvents(),q.comparePoints(this.leftSE.point,this.rightSE.point)>0&&this.swapEvents(),n&&(r.checkForConsuming(),i.checkForConsuming()),e}swapEvents(){const t=this.rightSE;this.rightSE=this.leftSE,this.leftSE=t,this.leftSE.isLeft=!0,this.rightSE.isLeft=!1;for(let t=0,e=this.windings.length;t<e;t++)this.windings[t]*=-1}consume(t){let e=this,n=t;for(;e.consumedBy;)e=e.consumedBy;for(;n.consumedBy;)n=n.consumedBy;const r=F.compare(e,n);if(0!==r){if(r>0){const t=e;e=n,n=t}if(e.prev===n){const t=e;e=n,n=t}for(let t=0,r=n.rings.length;t<r;t++){const r=n.rings[t],i=n.windings[t],o=e.rings.indexOf(r);-1===o?(e.rings.push(r),e.windings.push(i)):e.windings[o]+=i}n.rings=null,n.windings=null,n.consumedBy=e,n.leftSE.consumedBy=e.leftSE,n.rightSE.consumedBy=e.rightSE}}prevInResult(){return void 0!==this._prevInResult||(this.prev?this.prev.isInResult()?this._prevInResult=this.prev:this._prevInResult=this.prev.prevInResult():this._prevInResult=null),this._prevInResult}beforeState(){if(void 0!==this._beforeState)return this._beforeState;if(this.prev){const t=this.prev.consumedBy||this.prev;this._beforeState=t.afterState()}else this._beforeState={rings:[],windings:[],multiPolys:[]};return this._beforeState}afterState(){if(void 0!==this._afterState)return this._afterState;const t=this.beforeState();this._afterState={rings:t.rings.slice(0),windings:t.windings.slice(0),multiPolys:[]};const e=this._afterState.rings,n=this._afterState.windings,r=this._afterState.multiPolys;for(let t=0,r=this.rings.length;t<r;t++){const r=this.rings[t],i=this.windings[t],o=e.indexOf(r);-1===o?(e.push(r),n.push(i)):n[o]+=i}const i=[],o=[];for(let t=0,r=e.length;t<r;t++){if(0===n[t])continue;const r=e[t],s=r.poly;if(-1===o.indexOf(s))if(r.isExterior)i.push(s);else{-1===o.indexOf(s)&&o.push(s);const t=i.indexOf(r.poly);-1!==t&&i.splice(t,1)}}for(let t=0,e=i.length;t<e;t++){const e=i[t].multiPoly;-1===r.indexOf(e)&&r.push(e)}return this._afterState}isInResult(){if(this.consumedBy)return!1;if(void 0!==this._isInResult)return this._isInResult;const t=this.beforeState().multiPolys,e=this.afterState().multiPolys;switch(H.type){case"union":{const n=0===t.length,r=0===e.length;this._isInResult=n!==r;break}case"intersection":{let n,r;t.length<e.length?(n=t.length,r=e.length):(n=e.length,r=t.length),this._isInResult=r===H.numMultiPolys&&n<r;break}case"xor":{const n=Math.abs(t.length-e.length);this._isInResult=n%2==1;break}case"difference":{const n=t=>1===t.length&&t[0].isSubject;this._isInResult=n(t)!==n(e);break}default:throw new Error(`Unrecognized operation type found ${H.type}`)}return this._isInResult}}class j{constructor(t,e,n){if(!Array.isArray(t)||0===t.length)throw new Error("Input geometry is not a valid Polygon or MultiPolygon");if(this.poly=e,this.isExterior=n,this.segments=[],"number"!=typeof t[0][0]||"number"!=typeof t[0][1])throw new Error("Input geometry is not a valid Polygon or MultiPolygon");const r=b.round(t[0][0],t[0][1]);this.bbox={ll:{x:r.x,y:r.y},ur:{x:r.x,y:r.y}};let i=r;for(let e=1,n=t.length;e<n;e++){if("number"!=typeof t[e][0]||"number"!=typeof t[e][1])throw new Error("Input geometry is not a valid Polygon or MultiPolygon");let n=b.round(t[e][0],t[e][1]);n.x===i.x&&n.y===i.y||(this.segments.push(F.fromRing(i,n,this)),n.x<this.bbox.ll.x&&(this.bbox.ll.x=n.x),n.y<this.bbox.ll.y&&(this.bbox.ll.y=n.y),n.x>this.bbox.ur.x&&(this.bbox.ur.x=n.x),n.y>this.bbox.ur.y&&(this.bbox.ur.y=n.y),i=n)}r.x===i.x&&r.y===i.y||this.segments.push(F.fromRing(i,r,this))}getSweepEvents(){const t=[];for(let e=0,n=this.segments.length;e<n;e++){const n=this.segments[e];t.push(n.leftSE),t.push(n.rightSE)}return t}}class U{constructor(t,e){if(!Array.isArray(t))throw new Error("Input geometry is not a valid Polygon or MultiPolygon");this.exteriorRing=new j(t[0],this,!0),this.bbox={ll:{x:this.exteriorRing.bbox.ll.x,y:this.exteriorRing.bbox.ll.y},ur:{x:this.exteriorRing.bbox.ur.x,y:this.exteriorRing.bbox.ur.y}},this.interiorRings=[];for(let e=1,n=t.length;e<n;e++){const n=new j(t[e],this,!1);n.bbox.ll.x<this.bbox.ll.x&&(this.bbox.ll.x=n.bbox.ll.x),n.bbox.ll.y<this.bbox.ll.y&&(this.bbox.ll.y=n.bbox.ll.y),n.bbox.ur.x>this.bbox.ur.x&&(this.bbox.ur.x=n.bbox.ur.x),n.bbox.ur.y>this.bbox.ur.y&&(this.bbox.ur.y=n.bbox.ur.y),this.interiorRings.push(n)}this.multiPoly=e}getSweepEvents(){const t=this.exteriorRing.getSweepEvents();for(let e=0,n=this.interiorRings.length;e<n;e++){const n=this.interiorRings[e].getSweepEvents();for(let e=0,r=n.length;e<r;e++)t.push(n[e])}return t}}class Y{constructor(t,e){if(!Array.isArray(t))throw new Error("Input geometry is not a valid Polygon or MultiPolygon");try{"number"==typeof t[0][0][0]&&(t=[t])}catch(t){}this.polys=[],this.bbox={ll:{x:Number.POSITIVE_INFINITY,y:Number.POSITIVE_INFINITY},ur:{x:Number.NEGATIVE_INFINITY,y:Number.NEGATIVE_INFINITY}};for(let e=0,n=t.length;e<n;e++){const n=new U(t[e],this);n.bbox.ll.x<this.bbox.ll.x&&(this.bbox.ll.x=n.bbox.ll.x),n.bbox.ll.y<this.bbox.ll.y&&(this.bbox.ll.y=n.bbox.ll.y),n.bbox.ur.x>this.bbox.ur.x&&(this.bbox.ur.x=n.bbox.ur.x),n.bbox.ur.y>this.bbox.ur.y&&(this.bbox.ur.y=n.bbox.ur.y),this.polys.push(n)}this.isSubject=e}getSweepEvents(){const t=[];for(let e=0,n=this.polys.length;e<n;e++){const n=this.polys[e].getSweepEvents();for(let e=0,r=n.length;e<r;e++)t.push(n[e])}return t}}class V{static factory(t){const e=[];for(let n=0,r=t.length;n<r;n++){const r=t[n];if(!r.isInResult()||r.ringOut)continue;let i=null,o=r.leftSE,s=r.rightSE;const l=[o],h=o.point,u=[];for(;i=o,o=s,l.push(o),o.point!==h;)for(;;){const t=o.getAvailableLinkedEvents();if(0===t.length){const t=l[0].point,e=l[l.length-1].point;throw new Error(`Unable to complete output ring starting at [${t.x}, ${t.y}]. Last matching segment found ends at [${e.x}, ${e.y}].`)}if(1===t.length){s=t[0].otherSE;break}let n=null;for(let t=0,e=u.length;t<e;t++)if(u[t].point===o.point){n=t;break}if(null!==n){const t=u.splice(n)[0],r=l.splice(t.index);r.unshift(r[0].otherSE),e.push(new V(r.reverse()));continue}u.push({index:l.length,point:o.point});const r=o.getLeftmostComparator(i);s=t.sort(r)[0].otherSE;break}e.push(new V(l))}return e}constructor(t){this.events=t;for(let e=0,n=t.length;e<n;e++)t[e].segment.ringOut=this;this.poly=null}getGeom(){let t=this.events[0].point;const e=[t];for(let n=1,r=this.events.length-1;n<r;n++){const r=this.events[n].point,i=this.events[n+1].point;0!==$(r,t,i)&&(e.push(r),t=r)}if(1===e.length)return null;const n=e[0],r=e[1];0===$(n,t,r)&&e.shift(),e.push(e[0]);const i=this.isExteriorRing()?1:-1,o=this.isExteriorRing()?0:e.length-1,s=this.isExteriorRing()?e.length:-1,l=[];for(let t=o;t!=s;t+=i)l.push([e[t].x,e[t].y]);return l}isExteriorRing(){if(void 0===this._isExteriorRing){const t=this.enclosingRing();this._isExteriorRing=!t||!t.isExteriorRing()}return this._isExteriorRing}enclosingRing(){return void 0===this._enclosingRing&&(this._enclosingRing=this._calcEnclosingRing()),this._enclosingRing}_calcEnclosingRing(){let t=this.events[0];for(let e=1,n=this.events.length;e<n;e++){const n=this.events[e];q.compare(t,n)>0&&(t=n)}let e=t.segment.prevInResult(),n=e?e.prevInResult():null;for(;;){if(!e)return null;if(!n)return e.ringOut;if(n.ringOut!==e.ringOut)return n.ringOut.enclosingRing()!==e.ringOut?e.ringOut:e.ringOut.enclosingRing();e=n.prevInResult(),n=e?e.prevInResult():null}}}class X{constructor(t){this.exteriorRing=t,t.poly=this,this.interiorRings=[]}addInterior(t){this.interiorRings.push(t),t.poly=this}getGeom(){const t=[this.exteriorRing.getGeom()];if(null===t[0])return null;for(let e=0,n=this.interiorRings.length;e<n;e++){const n=this.interiorRings[e].getGeom();null!==n&&t.push(n)}return t}}class Q{constructor(t){this.rings=t,this.polys=this._composePolys(t)}getGeom(){const t=[];for(let e=0,n=this.polys.length;e<n;e++){const n=this.polys[e].getGeom();null!==n&&t.push(n)}return t}_composePolys(t){const e=[];for(let n=0,r=t.length;n<r;n++){const r=t[n];if(!r.poly)if(r.isExteriorRing())e.push(new X(r));else{const t=r.enclosingRing();t.poly||e.push(new X(t)),t.poly.addInterior(r)}}return e}}class W{constructor(t){let e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:F.compare;this.queue=t,this.tree=new l(e),this.segments=[]}process(t){const e=t.segment,n=[];if(t.consumedBy)return t.isLeft?this.queue.remove(t.otherSE):this.tree.remove(e),n;const r=t.isLeft?this.tree.add(e):this.tree.find(e);if(!r)throw new Error(`Unable to find segment #${e.id} [${e.leftSE.point.x}, ${e.leftSE.point.y}] -> [${e.rightSE.point.x}, ${e.rightSE.point.y}] in SweepLine tree.`);let i,o,s=r,l=r;for(;void 0===i;)s=this.tree.prev(s),null===s?i=null:void 0===s.key.consumedBy&&(i=s.key);for(;void 0===o;)l=this.tree.next(l),null===l?o=null:void 0===l.key.consumedBy&&(o=l.key);if(t.isLeft){let r=null;if(i){const t=i.getIntersection(e);if(null!==t&&(e.isAnEndpoint(t)||(r=t),!i.isAnEndpoint(t))){const e=this._splitSafely(i,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}}let s=null;if(o){const t=o.getIntersection(e);if(null!==t&&(e.isAnEndpoint(t)||(s=t),!o.isAnEndpoint(t))){const e=this._splitSafely(o,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}}if(null!==r||null!==s){let t=null;if(null===r)t=s;else if(null===s)t=r;else{t=q.comparePoints(r,s)<=0?r:s}this.queue.remove(e.rightSE),n.push(e.rightSE);const i=e.split(t);for(let t=0,e=i.length;t<e;t++)n.push(i[t])}n.length>0?(this.tree.remove(e),n.push(t)):(this.segments.push(e),e.prev=i)}else{if(i&&o){const t=i.getIntersection(o);if(null!==t){if(!i.isAnEndpoint(t)){const e=this._splitSafely(i,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}if(!o.isAnEndpoint(t)){const e=this._splitSafely(o,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}}}this.tree.remove(e)}return n}_splitSafely(t,e){this.tree.remove(t);const n=t.rightSE;this.queue.remove(n);const r=t.split(e);return r.push(n),void 0===t.consumedBy&&this.tree.add(t),r}}const Z="undefined"!=typeof process&&process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE||1e6,D="undefined"!=typeof process&&process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS||1e6;const H=new class{run(t,e,n){H.type=t,b.reset();const r=[new Y(e,!0)];for(let t=0,e=n.length;t<e;t++)r.push(new Y(n[t],!1));if(H.numMultiPolys=r.length,"difference"===H.type){const t=r[0];let e=1;for(;e<r.length;)null!==p(r[e].bbox,t.bbox)?e++:r.splice(e,1)}if("intersection"===H.type)for(let t=0,e=r.length;t<e;t++){const e=r[t];for(let n=t+1,i=r.length;n<i;n++)if(null===p(e.bbox,r[n].bbox))return[]}const i=new l(q.compare);for(let t=0,e=r.length;t<e;t++){const e=r[t].getSweepEvents();for(let t=0,n=e.length;t<n;t++)if(i.insert(e[t]),i.size>Z)throw new Error("Infinite loop when putting segment endpoints in a priority queue (queue size too big).")}const o=new W(i);let s=i.size,h=i.pop();for(;h;){const t=h.key;if(i.size===s){const e=t.segment;throw new Error(`Unable to pop() ${t.isLeft?"left":"right"} SweepEvent [${t.point.x}, ${t.point.y}] from segment #${e.id} [${e.leftSE.point.x}, ${e.leftSE.point.y}] -> [${e.rightSE.point.x}, ${e.rightSE.point.y}] from queue.`)}if(i.size>Z)throw new Error("Infinite loop when passing sweep line over endpoints (queue size too big).");if(o.segments.length>D)throw new Error("Infinite loop when passing sweep line over endpoints (too many sweep line segments).");const e=o.process(t);for(let t=0,n=e.length;t<n;t++){const n=e[t];void 0===n.consumedBy&&i.insert(n)}s=i.size,h=i.pop()}b.reset();const u=V.factory(o.segments);return new Q(u).getGeom()}};var J={union:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("union",t,n)},intersection:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("intersection",t,n)},xor:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("xor",t,n)},difference:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("difference",t,n)}};return J}));
+</script>
+<script>
+// ===================== stress core =====================
+// Exact Δσz/q of a uniformly loaded polygon at depth z below P, by summing closed-form edge integrals.
+function edgeTerm(ax, ay, bx, by, z) {
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+  if (len < 1e-12) return 0;
+  const tx = dx / len, ty = dy / len, cr = ax * by - ay * bx, h = Math.abs(cr) / len;
+  if (h < 1e-12) return 0;
+  const pa = Math.atan2(ax * tx + ay * ty, h), pb = Math.atan2(bx * tx + by * ty, h);
+  const a2 = (h / z) ** 2, c2 = 1 + a2, c = Math.sqrt(c2);
+  const F = p => { const s = Math.sin(p); return p - Math.asin(s / c) + a2 * s / (c2 * Math.sqrt(c2 - s * s)); };
+  return Math.sign(cr) * (F(pb) - F(pa));
+}
+function polyI(pts, px, py, z, orient) {
+  z = Math.max(z, 1e-7);
+  let s = 0;
+  for (let i = 0, n = pts.length; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    s += edgeTerm(a[0] - px, a[1] - py, b[0] - px, b[1] - py, z);
+  }
+  return orient * s / (2 * Math.PI);
+}
+// Ring list [{p, o}] → Δσz/q; o carries the ring's orientation and whether it bounds a hole.
+function regionI(rings, px, py, z) { let s = 0; for (const r of rings) s += polyI(r.p, px, py, z, r.o); return s; }
+function area2(pts) { let s = 0; for (let i = 0, n = pts.length; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; s += a[0] * b[1] - b[0] * a[1]; } return s; }
+
+// ===================== state =====================
+let W = 600, H = 450;
+let shapes = [], selId = null, nextId = 1;
+let P = { x: 1, y: 1.5 }, Z = 2;
+let view = { cx: 3, cy: 2, w: 15 };
+let tool = "select", snapStep = 0.5, lastQ = 100, newMode = "add";
+let draft = null;          // drawing in progress
+let drag = null;           // active pointer gesture
+const hist = [];
+
+function polyOf(s, n = 512) {
+  if (s.type === "rect") return [[s.x, s.y], [s.x + s.B, s.y], [s.x + s.B, s.y + s.L], [s.x, s.y + s.L]];
+  if (s.type === "circle") { const p = []; for (let i = 0; i < n; i++) { const t = 2 * Math.PI * i / n; p.push([s.cx + s.R * Math.cos(t), s.cy + s.R * Math.sin(t)]); } return p; }
+  return s.pts;
+}
+// Combine the shapes in order into loaded regions (one layer per loaded shape), using polygon clipping.
+const PC = window.polygonClipping;
+const layerCache = {};
+function mpRings(mp) { const out = []; for (const poly of mp) poly.forEach((ring, i) => { const p = ring.slice(0, -1); if (p.length < 3) return; const a = area2(p); out.push({ p, o: (i === 0 ? 1 : -1) * (a < 0 ? -1 : 1) }); }); return out; }
+function mpArea(mp) { let A = 0; for (const poly of mp) poly.forEach((ring, i) => { A += (i === 0 ? 1 : -1) * Math.abs(area2(ring.slice(0, -1))) / 2; }); return A; }
+function layers(n = 512) {
+  const key = n + JSON.stringify(shapes);
+  if (layerCache[n] && layerCache[n].key === key) return layerCache[n].L;
+  const L = [];
+  for (const s of shapes) {
+    const p = polyOf(s, n), ring = [...p, p[0]];
+    const before = L.reduce((a, l) => a + (l.A || 0), 0);
+    if (s.mode !== "sup") for (const l of L) if (l.mp && l.mp.length) {
+      try { l.mp = PC.difference(l.mp, [ring]); } catch (e) { /* leave this layer as it was */ }
+      l.A = mpArea(l.mp);
+    }
+    if (s.mode === "sub") { L.push({ s, mp: null, removed: before - L.reduce((a, l) => a + (l.A || 0), 0) }); continue; }
+    let mp; try { mp = PC.union([ring]); } catch (e) { mp = [[ring]]; }
+    L.push({ s, mp, A: mpArea(mp) });
+  }
+  for (const l of L) l.rings = l.mp ? mpRings(l.mp) : [];
+  layerCache[n] = { key, L };
+  return L;
+}
+function snap(v) { return snapStep > 0 ? Math.round(v / snapStep) * snapStep : Math.round(v * 1000) / 1000; }
+const fmt = (v, d = 2) => (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toFixed(d);
+const r3 = v => +(+v).toFixed(3);
+function save() { hist.push(JSON.stringify({ shapes, P, Z, selId, nextId })); if (hist.length > 80) hist.shift(); $("undo").disabled = false; }
+function undo() { const s = hist.pop(); if (!s) return; ({ shapes, P, Z, selId, nextId } = JSON.parse(s)); $("undo").disabled = !hist.length; draft = null; updateAll(true); }
+
+// ===================== view transforms =====================
+const k = () => W / view.w;
+const X = x => W / 2 + (x - view.cx) * k();
+const Y = y => H / 2 - (y - view.cy) * k();
+const wx = sx => view.cx + (sx - W / 2) / k();
+const wy = sy => view.cy - (sy - H / 2) / k();
+const $ = id => document.getElementById(id);
+const svg = $("svg"), NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const a in attrs) e.setAttribute(a, attrs[a]); (parent || svg).appendChild(e); return e; }
+function niceStep(range, target) { const raw = range / target, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function pathOf(pts, close = true) { return pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("") + (close ? "Z" : ""); }
+
+// ===================== stress map (contours) =====================
+let NX = 150, NY = 112;
+let mapCache = null, mapKey = "";
+function computeMap() {
+  const key = JSON.stringify([shapes, Z, view]);
+  if (key === mapKey) return mapCache;
+  const gs = layers(128).filter(l => l.mp).map(l => ({ q: l.s.q, rings: l.rings }));
+  const v = new Float64Array((NX + 1) * (NY + 1));
+  for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+    const x = wx(i * W / NX), y = wy(j * H / NY);
+    let s = 0; for (const g of gs) s += g.q * regionI(g.rings, x, y, Z);
+    v[j * (NX + 1) + i] = s;
+  }
+  mapKey = key; mapCache = v; return v;
+}
+function contours(v, level) {
+  const segs = [], N1 = NX + 1, dx = W / NX, dy = H / NY;
+  const at = (i, j) => v[j * N1 + i];
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const c = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, b]) => at(a, b));
+    let idx = 0; c.forEach((val, n) => { if (val >= level) idx |= 1 << n; });
+    if (idx === 0 || idx === 15) continue;
+    const ed = [];
+    const E = [[0, 1], [1, 2], [2, 3], [3, 0]], C = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]];
+    for (const [p, q] of E) {
+      if ((c[p] >= level) !== (c[q] >= level)) {
+        const t = (level - c[p]) / (c[q] - c[p]);
+        ed.push([(C[p][0] + t * (C[q][0] - C[p][0])) * dx, (C[p][1] + t * (C[q][1] - C[p][1])) * dy]);
+      }
+    }
+    if (ed.length === 2) segs.push(ed);
+    else if (ed.length === 4) { segs.push([ed[0], ed[1]]); segs.push([ed[2], ed[3]]); }
+  }
+  return segs;
+}
+
+// ===================== drawing =====================
+function draw() {
+  svg.textContent = "";
+  const isoLabs = [];
+  svg.setAttribute("class", tool === "select" ? "t-select" : "t-draw");
+  // grid
+  const kk = k(), x0 = wx(0), x1 = wx(W), y0 = wy(H), y1 = wy(0);
+  let minor = snapStep > 0 ? snapStep : 0.5; while (minor * kk < 9) minor *= 2;
+  const major = Math.max(niceStep(view.w, 6), minor);
+  const g = el("g", {});
+  for (let x = Math.ceil(x0 / minor) * minor; x <= x1; x += minor) el("line", { class: Math.abs(x / major - Math.round(x / major)) < 1e-6 ? "gmajor" : "gminor", x1: X(x), y1: 0, x2: X(x), y2: H }, g);
+  for (let y = Math.ceil(y0 / minor) * minor; y <= y1; y += minor) el("line", { class: Math.abs(y / major - Math.round(y / major)) < 1e-6 ? "gmajor" : "gminor", x1: 0, y1: Y(y), x2: W, y2: Y(y) }, g);
+  if (x0 < 0 && x1 > 0) el("line", { class: "gaxis", x1: X(0), y1: 0, x2: X(0), y2: H }, g);
+  if (y0 < 0 && y1 > 0) el("line", { class: "gaxis", x1: 0, y1: Y(0), x2: W, y2: Y(0) }, g);
+  for (let x = Math.ceil(x0 / major) * major; x <= x1; x += major) if (X(x) > 18 && X(x) < W - 14) el("text", { class: "tick", x: X(x), y: H - 5, "text-anchor": "middle" }, g).textContent = r3(x);
+  for (let y = Math.ceil(y0 / major) * major; y <= y1; y += major) if (Y(y) > 12 && Y(y) < H - 18) el("text", { class: "tick", x: 4, y: Y(y) + 3.5 }, g).textContent = r3(y);
+
+  // loaded regions after combining the shapes, then the outline of every shape
+  for (const l of layers(128)) if (l.rings.length) el("path", { class: "eff" + (l.s.q < 0 ? " neg" : ""), d: l.rings.map(r => pathOf(r.p)).join("") });
+  for (const s of shapes) el("path", { class: "shape " + (s.mode || "add") + (s.id === selId ? " sel" : ""), d: pathOf(polyOf(s, 128)) });
+  // contours
+  if ($("showMap").checked && shapes.some(s => s.mode !== "sub")) {
+    const v = computeMap();
+    const qs = shapes.filter(s => s.mode !== "sub").map(s => s.q), qmax = Math.max(1e-9, ...qs.map(Math.abs));
+    const sameQ = qs.every(q => q === qs[0]) && qs[0] > 0;
+    const fr = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9];
+    const gl = el("g", { "pointer-events": "none" });
+    const placed = isoLabs;
+    for (const f of fr) {
+      const segs = contours(v, f * qmax);
+      if (!segs.length) continue;
+      el("path", { class: "iso", d: segs.map(([a, b]) => `M${a[0].toFixed(1)},${a[1].toFixed(1)}L${b[0].toFixed(1)},${b[1].toFixed(1)}`).join("") }, gl);
+      // label at the highest point of the contour, if it is clear of other labels
+      let best = null;
+      for (const [a, b] of segs) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; if (m[1] > 14 && m[1] < H - 20 && m[0] > 24 && m[0] < W - 24 && (!best || m[1] < best[1])) best = m; }
+      if (best && placed.every(p => Math.abs(p[0] - best[0]) > 34 || Math.abs(p[1] - best[1]) > 13)) {
+        placed.push(best);
+        const lab = sameQ ? `${f}q` : `${r3(f * qmax)}`;
+        el("text", { class: "isolab", x: best[0], y: best[1] - 3, "text-anchor": "middle" }, gl).textContent = lab;
+      }
+    }
+  }
+  // labels: each placed at a sampled point well inside its own loaded region (or hole), clear of P and of other labels
+  const placed = [[X(P.x) + 4, Y(P.y) - 4], ...isoLabs.map(q => [q[0], q[1] - 6])];
+  for (const l of layers(64)) {
+    const s = l.s, rings = s.mode === "sub" || !l.rings.length ? [{ p: polyOf(s, 64), o: 1 }] : l.rings;
+    const txt = s.mode === "sub" ? `${s.id}: hole` : `${s.id}: ${s.mode === "sup" ? "+" : ""}${r3(s.q)} kPa`;
+    const pos = labelSpot(rings, placed, txt.length * 7 + 6);
+    if (!pos) continue;
+    placed.push(pos);
+    el("text", { class: "slab", x: pos[0], y: pos[1] + 4, "text-anchor": "middle" }).textContent = txt;
+  }
+  // Newmark overlay
+  if ($("showNm").checked && Z > 0) {
+    const gn = el("g", { "pointer-events": "none" });
+    const rr = []; for (let i = 1; i <= 9; i++) rr.push(Z * Math.sqrt((1 - i / 10) ** (-2 / 3) - 1));
+    for (const r of rr) el("circle", { class: "nm", cx: X(P.x), cy: Y(P.y), r: r * kk }, gn);
+    const rOut = Math.hypot(W, H);
+    for (let i = 0; i < 20; i++) { const t = i * Math.PI / 10; el("line", { class: "nm", x1: X(P.x) + rr[0] * kk * Math.cos(t), y1: Y(P.y) - rr[0] * kk * Math.sin(t), x2: X(P.x) + rOut * Math.cos(t), y2: Y(P.y) - rOut * Math.sin(t) }, gn); }
+  }
+  // draft
+  if (draft) {
+    if (draft.type === "rect" && draft.b) { const [a, b] = [draft.a, draft.b]; el("path", { class: "draft", d: pathOf([[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]]) }); }
+    if (draft.type === "circle" && draft.b) { const R = Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]); el("circle", { class: "draft", cx: X(draft.a[0]), cy: Y(draft.a[1]), r: R * kk }); el("text", { class: "tick", x: X(draft.a[0]), y: Y(draft.a[1]) - R * kk - 6, "text-anchor": "middle" }).textContent = `R = ${r3(R)} m`; }
+    if (draft.type === "poly") {
+      const pts = draft.pts.concat(draft.hover ? [draft.hover] : []);
+      if (pts.length > 1) el("path", { class: "draft", d: pathOf(pts, false) });
+      draft.pts.forEach((p, i) => el("circle", { class: i ? "draftv" : "first", cx: X(p[0]), cy: Y(p[1]), r: i ? 3 : 6 }));
+    }
+    if ((draft.type === "rect") && draft.b) el("text", { class: "tick", x: X((draft.a[0] + draft.b[0]) / 2), y: Y(Math.max(draft.a[1], draft.b[1])) - 6, "text-anchor": "middle" }).textContent = `${r3(Math.abs(draft.b[0] - draft.a[0]))} × ${r3(Math.abs(draft.b[1] - draft.a[1]))} m`;
+  }
+  // handles for the selected footing
+  const s = shapes.find(t => t.id === selId);
+  if (s && tool === "select") handlesOf(s).forEach(([hx, hy], i) => el("rect", { class: "handle", x: X(hx) - 5, y: Y(hy) - 5, width: 10, height: 10, rx: 2 }));
+  // point P
+  el("circle", { class: "pt", cx: X(P.x), cy: Y(P.y), r: 6.5 });
+  el("text", { class: "ptlab", x: X(P.x) + 9, y: Y(P.y) - 8 }).textContent = "P";
+}
+function labelSpot(rings, placed, tw) {
+  const sp = rings.map(r => r.p.map(q => [X(q[0]), Y(q[1])]));
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const r of sp) for (const [x, y] of r) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  x0 = Math.max(x0, tw / 2 + 2); x1 = Math.min(x1, W - tw / 2 - 2); y0 = Math.max(y0, 12); y1 = Math.min(y1, H - 22);
+  if (x0 > x1 || y0 > y1) return null;
+  let best = null, bestScore = -Infinity;
+  const N = 18;
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const x = x0 + (x1 - x0) * i / N, y = y0 + (y1 - y0) * j / N;
+    let inside = false, dmin = Infinity;
+    for (const r of sp) for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
+      const [ax, ay] = r[a], [bx, by] = r[b];
+      if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) inside = !inside;
+      const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+      dmin = Math.min(dmin, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+    }
+    if (!inside) continue;
+    // clearance from the boundary (capped), minus a penalty for sitting on P or another label
+    let score = Math.min(dmin, 40);
+    for (const [px, py] of placed) { const ox = Math.abs(px - x) - tw / 2 - 26, oy = Math.abs(py - y) - 18; if (ox < 0 && oy < 0) score -= 100; }
+    score -= 0.02 * Math.hypot(x - (x0 + x1) / 2, y - (y0 + y1) / 2);
+    if (score > bestScore) { bestScore = score; best = [x, y]; }
+  }
+  return best;
+}
+function centroid(p) { let A = 0, cx = 0, cy = 0; for (let i = 0, n = p.length; i < n; i++) { const a = p[i], b = p[(i + 1) % n], c = a[0] * b[1] - b[0] * a[1]; A += c; cx += (a[0] + b[0]) * c; cy += (a[1] + b[1]) * c; } return Math.abs(A) < 1e-12 ? p[0] : [cx / (3 * A), cy / (3 * A)]; }
+function handlesOf(s) {
+  if (s.type === "rect") return [[s.x, s.y], [s.x + s.B, s.y], [s.x + s.B, s.y + s.L], [s.x, s.y + s.L]];
+  if (s.type === "circle") return [[s.cx + s.R, s.cy]];
+  return s.pts;
+}
+
+// ===================== results =====================
+function compute(px, py, z) {
+  return layers(512).map(l => { if (!l.mp) return { s: l.s, A: -l.removed, I: NaN, d: 0 }; const I = regionI(l.rings, px, py, z); return { s: l.s, A: l.A, I, d: l.s.q * I }; });
+}
+function results() {
+  const rs = compute(P.x, P.y, Z), tot = rs.reduce((a, r) => a + r.d, 0);
+  $("rk").textContent = fmt(tot);
+  const qs = shapes.filter(s => s.mode !== "sub").map(s => s.q), same = qs.length && qs.every(q => q === qs[0]) && qs[0] !== 0 && !shapes.some(s => s.mode === "sup");
+  const I = same ? tot / qs[0] : NaN;
+  $("ri").textContent = same ? fmt(I, 4) : "—";
+  $("riSub").textContent = same ? `q = ${r3(qs[0])} kPa` : (qs.length ? "Loads differ or are superposed: see the table" : "");
+  $("rn").textContent = same ? fmt(I / 0.005, 1) : "—";
+  const tb = $("tb"); tb.textContent = "";
+  for (const r of rs) {
+    const tr = document.createElement("tr"); if (r.s.id === selId) tr.className = "sel";
+    const nm = { rect: "rectangle", circle: "circle", poly: "polygon" }[r.s.type];
+    tr.innerHTML = r.s.mode === "sub"
+      ? `<td>${r.s.id}</td><td class="mode-sub">${nm}, subtract</td><td>${fmt(r.A, 2)}</td><td>—</td><td>—</td><td>—</td>`
+      : `<td>${r.s.id}</td><td>${nm}${r.s.mode === "sup" ? ", superpose" : ""}</td><td>${fmt(r.A, 2)}</td><td>${r3(r.s.q)}</td><td>${fmt(r.I, 4)}</td><td>${fmt(r.d)}</td>`;
+    tr.onclick = () => { selId = r.s.id; setTool("select"); updateAll(); };
+    tb.appendChild(tr);
+  }
+  $("tt").textContent = fmt(tot);
+  $("ta").textContent = fmt(rs.reduce((a, r) => a + (r.s.mode === "sub" ? 0 : r.A), 0), 2);
+  $("emptyMsg").hidden = shapes.length > 0;
+}
+function syncInputs() {
+  if (document.activeElement !== $("px")) $("px").value = r3(P.x);
+  if (document.activeElement !== $("py")) $("py").value = r3(P.y);
+  if (document.activeElement !== $("pz")) $("pz").value = r3(Z);
+  const s = shapes.find(t => t.id === selId);
+  $("editor").hidden = !s; $("del").disabled = !s; $("clear").disabled = !shapes.length;
+  if (!s) return;
+  $("edTitle").textContent = `Footing ${s.id} (${{ rect: "rectangle", circle: "circle", poly: "polygon" }[s.type]})`;
+  $("edRect").hidden = s.type !== "rect"; $("edCirc").hidden = s.type !== "circle"; $("edPoly").hidden = s.type !== "poly";
+  const set = (id, v) => { if (document.activeElement !== $(id)) $(id).value = r3(v); };
+  set("eq", s.q);
+  const md = s.mode || "add";
+  document.querySelectorAll("#emode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === md));
+  $("edQ").hidden = md === "sub";
+  $("modeHint").textContent = { add: "Loaded with q. Replaces any load below it, so overlapping shapes merge.", sub: "Removes all load below it, leaving a hole.", sup: "Adds q on top of any load below it." }[md];
+  const idx = shapes.indexOf(s); $("up").disabled = idx === shapes.length - 1; $("down").disabled = idx === 0;
+  if (s.type === "rect") { set("ex", s.x); set("ey", s.y); set("eB", s.B); set("eL", s.L); }
+  if (s.type === "circle") { set("ecx", s.cx); set("ecy", s.cy); set("eR", s.R); }
+  if (s.type === "poly" && document.activeElement !== $("ept")) { $("ept").value = s.pts.map(p => `${r3(p[0])}, ${r3(p[1])}`).join("\n"); $("eptMsg").textContent = "Edit and click outside the box to apply."; }
+}
+
+// ===================== depth profile =====================
+const prof = $("prof"), PH = 240, PM = { l: 52, r: 18, t: 36, b: 14 };
+let PW = 640;
+let profData = null;
+function drawProfile(hoverY) {
+  prof.textContent = "";
+  PW = Math.max(300, Math.round(prof.parentNode.clientWidth - 28)); prof.setAttribute("viewBox", `0 0 ${PW} ${PH}`);
+  const pe = (t, a, p) => el(t, a, p || prof);
+  let ext = 1;
+  for (const s of shapes) { const p = polyOf(s, 64); const xs = p.map(q => q[0]), ys = p.map(q => q[1]); ext = Math.max(ext, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)); }
+  const zmax = Math.max(1.25 * Z, 3 * ext);
+  if (!profData || profData.key !== JSON.stringify([shapes, P, zmax])) {
+    const n = 140, zs = [], vs = [];
+    for (let i = 0; i <= n; i++) { const z = zmax * i / n; zs.push(z); vs.push(compute(P.x, P.y, z).reduce((a, r) => a + r.d, 0)); }
+    profData = { key: JSON.stringify([shapes, P, zmax]), zs, vs, zmax };
+  }
+  const { zs, vs } = profData;
+  let vmin = Math.min(0, ...vs), vmax = Math.max(0, ...vs); if (vmax - vmin < 1e-9) vmax = vmin + 1;
+  const sx = niceStep(vmax - vmin, 6); vmin = Math.floor(vmin / sx) * sx; vmax = Math.ceil(vmax / sx) * sx;
+  const sz = niceStep(zmax, 5);
+  const XX = v => PM.l + (v - vmin) / (vmax - vmin) * (PW - PM.l - PM.r);
+  const YY = z => PM.t + z / zmax * (PH - PM.t - PM.b);
+  for (let v = vmin; v <= vmax + 1e-9; v += sx) { pe("line", { class: "gl", x1: XX(v), y1: PM.t, x2: XX(v), y2: PH - PM.b }); pe("text", { class: "tick", x: XX(v), y: PM.t - 6, "text-anchor": "middle" }).textContent = r3(v); }
+  for (let z = 0; z <= zmax + 1e-9; z += sz) { pe("line", { class: "gl", x1: PM.l, y1: YY(z), x2: PW - PM.r, y2: YY(z) }); pe("text", { class: "tick", x: PM.l - 6, y: YY(z) + 3.5, "text-anchor": "end" }).textContent = r3(z); }
+  if (vmin < 0) pe("line", { class: "zero", x1: XX(0), y1: PM.t, x2: XX(0), y2: PH - PM.b });
+  pe("line", { class: "ax", x1: PM.l, y1: PM.t, x2: PW - PM.r, y2: PM.t });
+  const xl = pe("text", { class: "axlab", x: PM.l, y: 13 }); xl.innerHTML = 'Δσ<tspan dy="3" font-size="9">z</tspan><tspan dy="-3"> (kPa) →</tspan>';
+  pe("text", { class: "axlab", x: PM.l - 8, y: 13, "text-anchor": "end" }).textContent = "z (m) ↓";
+  pe("path", { class: "line", d: zs.map((z, i) => (i ? "L" : "M") + XX(vs[i]).toFixed(1) + "," + YY(z).toFixed(1)).join("") });
+  // current depth
+  const cur = compute(P.x, P.y, Z).reduce((a, r) => a + r.d, 0);
+  pe("line", { class: "cur", x1: PM.l, y1: YY(Z), x2: PW - PM.r, y2: YY(Z) });
+  pe("circle", { class: "curpt", cx: XX(cur), cy: YY(Z), r: 5 });
+  // hover crosshair
+  if (hoverY != null) {
+    const z = Math.min(zmax, Math.max(0, (hoverY - PM.t) / (PH - PM.t - PM.b) * zmax));
+    const v = compute(P.x, P.y, z).reduce((a, r) => a + r.d, 0);
+    pe("line", { class: "hov", x1: PM.l, y1: YY(z), x2: PW - PM.r, y2: YY(z) });
+    pe("circle", { class: "hovpt", cx: XX(v), cy: YY(z), r: 4.5 });
+    const right = XX(v) < PW - 170;
+    pe("text", { class: "tip", x: XX(v) + (right ? 10 : -10), y: YY(z) - 7, "text-anchor": right ? "start" : "end" }).textContent = `z = ${fmt(z, 2)} m: ${fmt(v)} kPa`;
+  }
+  pe("rect", { class: "hit", x: 0, y: 0, width: PW, height: PH });
+}
+prof.addEventListener("pointermove", e => { const r = prof.getBoundingClientRect(); drawProfile((e.clientY - r.top) * PH / r.height); });
+prof.addEventListener("pointerleave", () => drawProfile(null));
+prof.addEventListener("click", e => { const r = prof.getBoundingClientRect(); const yy = (e.clientY - r.top) * PH / r.height; if (!profData) return; save(); Z = r3(Math.max(0, (yy - PM.t) / (PH - PM.t - PM.b) * profData.zmax)); updateAll(); });
+
+// ===================== update loop =====================
+let raf = 0, profileDirty = true;
+// board drawn at 1 SVG unit per CSS pixel, so text stays a readable size on phones
+let bw = 0;
+function sizeBoard() {
+  const w = Math.round(svg.parentNode.clientWidth); if (!w || Math.abs(w - bw) < 2) return false;
+  bw = w; W = w; H = Math.round(Math.max(320, Math.min(w * 0.75, 520)));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); NX = Math.round(W / 4); NY = Math.round(H / 4); mapKey = ""; return true;
+}
+new ResizeObserver(() => { if (sizeBoard()) updateAll(false); }).observe(svg.parentNode);
+sizeBoard();
+let rw = 0; new ResizeObserver(() => { const w = prof.parentNode.clientWidth; if (Math.abs(w - rw) > 2) { rw = w; drawProfile(null); } }).observe(prof.parentNode);
+function updateAll(full) { if (full !== false) profileDirty = true; if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); results(); syncInputs(); if (profileDirty) { drawProfile(null); profileDirty = false; } }); }
+
+// ===================== pointer interaction =====================
+function svgXY(e) { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; }
+function hitShape(x, y) {
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (s.type === "circle") { if (Math.hypot(x - s.cx, y - s.cy) <= s.R) return s; continue; }
+    const p = polyOf(s); let inside = false;
+    for (let a = 0, b = p.length - 1; a < p.length; b = a++) { if ((p[a][1] > y) !== (p[b][1] > y) && x < (p[b][0] - p[a][0]) * (y - p[a][1]) / (p[b][1] - p[a][1]) + p[a][0]) inside = !inside; }
+    if (inside) return s;
+  }
+  return null;
+}
+svg.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  const [sx, sy] = svgXY(e), x = wx(sx), y = wy(sy);
+  svg.setPointerCapture(e.pointerId);
+  // P has priority unless a polygon is being drawn
+  if (!(draft && draft.type === "poly") && Math.hypot(sx - X(P.x), sy - Y(P.y)) < 12) { save(); drag = { kind: "P" }; return; }
+  if (tool === "select") {
+    const s = shapes.find(t => t.id === selId);
+    if (s) { const hs = handlesOf(s); for (let i = 0; i < hs.length; i++) if (Math.hypot(sx - X(hs[i][0]), sy - Y(hs[i][1])) < 10) { save(); drag = { kind: "handle", s, i, opp: s.type === "rect" ? hs[(i + 2) % 4] : null }; return; } }
+    const h = hitShape(x, y);
+    if (h) { selId = h.id; save(); drag = { kind: "move", s: h, start: [x, y], orig: JSON.parse(JSON.stringify(h)) }; updateAll(false); return; }
+    selId = null; drag = { kind: "pan", start: [sx, sy], c: [view.cx, view.cy] }; svg.classList.add("panning"); updateAll(false); return;
+  }
+  const p = [snap(x), snap(y)];
+  if (tool === "rect" || tool === "circle") { draft = { type: tool, a: p, b: null }; drag = { kind: "draft" }; updateAll(false); return; }
+  if (tool === "poly") {
+    if (!draft) { draft = { type: "poly", pts: [] }; }
+    const f = draft.pts[0];
+    if (f && draft.pts.length >= 3 && Math.hypot(sx - X(f[0]), sy - Y(f[1])) < 12) { finishPoly(); return; }
+    const l = draft.pts[draft.pts.length - 1];
+    if (!l || l[0] !== p[0] || l[1] !== p[1]) draft.pts.push(p);
+    showDrawbar(); updateAll(false);
+  }
+});
+svg.addEventListener("pointermove", e => {
+  const [sx, sy] = svgXY(e), x = wx(sx), y = wy(sy);
+  if (!drag) { if (draft && draft.type === "poly") { draft.hover = [snap(x), snap(y)]; updateAll(false); } return; }
+  if (drag.kind === "P") { P = { x: snap(x), y: snap(y) }; updateAll(); }
+  else if (drag.kind === "pan") { view.cx = drag.c[0] - (sx - drag.start[0]) / k(); view.cy = drag.c[1] + (sy - drag.start[1]) / k(); updateAll(false); }
+  else if (drag.kind === "draft") { draft.b = [snap(x), snap(y)]; updateAll(false); }
+  else if (drag.kind === "move") {
+    const s = drag.s, o = drag.orig, dx = x - drag.start[0], dy = y - drag.start[1];
+    if (s.type === "rect") { s.x = snap(o.x + dx); s.y = snap(o.y + dy); }
+    else if (s.type === "circle") { s.cx = snap(o.cx + dx); s.cy = snap(o.cy + dy); }
+    else { const ddx = snap(o.pts[0][0] + dx) - o.pts[0][0], ddy = snap(o.pts[0][1] + dy) - o.pts[0][1]; s.pts = o.pts.map(p => [r3(p[0] + ddx), r3(p[1] + ddy)]); }
+    updateAll();
+  } else if (drag.kind === "handle") {
+    const s = drag.s, p = [snap(x), snap(y)];
+    if (s.type === "rect") { const o = drag.opp; const B = Math.abs(p[0] - o[0]), L = Math.abs(p[1] - o[1]); if (B > 1e-9 && L > 1e-9) { s.x = Math.min(p[0], o[0]); s.y = Math.min(p[1], o[1]); s.B = r3(B); s.L = r3(L); } }
+    else if (s.type === "circle") { const R = snapStep > 0 ? Math.max(snapStep, Math.round(Math.hypot(x - s.cx, y - s.cy) / snapStep) * snapStep) : Math.hypot(x - s.cx, y - s.cy); s.R = r3(R); }
+    else s.pts[drag.i] = p;
+    updateAll();
+  }
+});
+function endDrag() {
+  if (!drag) return;
+  if (drag.kind === "draft" && draft && draft.b) {
+    const [a, b] = [draft.a, draft.b], d = draft; draft = null;
+    if (d.type === "rect" &&Math.abs(b[0] - a[0]) > 1e-9 && Math.abs(b[1] - a[1]) > 1e-9) addShape({ type: "rect", x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), B: r3(Math.abs(b[0] - a[0])), L: r3(Math.abs(b[1] - a[1])) });
+    if (d.type === "circle") { const R = Math.hypot(b[0] - a[0], b[1] - a[1]); if (R > 1e-9) addShape({ type: "circle", cx: a[0], cy: a[1], R: r3(R) }); }
+  }
+  if (drag.kind === "draft") draft = null;
+  drag = null; svg.classList.remove("panning"); updateAll();
+}
+svg.addEventListener("pointerup", endDrag);
+svg.addEventListener("pointercancel", endDrag);
+svg.addEventListener("dblclick", () => { if (draft && draft.type === "poly") finishPoly(); });
+svg.addEventListener("pointerleave", () => { if (draft && draft.type === "poly" && !drag) { draft.hover = null; updateAll(false); } });
+
+function addShape(s) { save(); s.id = nextId++; s.q = lastQ; s.mode = newMode; shapes.push(s); selId = s.id; setTool("select"); }
+function finishPoly() {
+  if (!draft) return;
+  const pts = draft.pts.filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1]);
+  if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop();
+  draft = null; hideDrawbar();
+  if (pts.length >= 3 && Math.abs(area2(pts)) > 1e-9) addShape({ type: "poly", pts }); else updateAll(false);
+}
+function showDrawbar() { $("drawbar").hidden = false; $("drawmsg").textContent = draft.pts.length < 3 ? `Click the corners (${draft.pts.length} so far).` : "Click the first corner, or Finish."; $("finish").disabled = draft.pts.length < 3; }
+function hideDrawbar() { $("drawbar").hidden = true; }
+$("finish").onclick = finishPoly;
+$("cancel").onclick = () => { draft = null; hideDrawbar(); updateAll(false); };
+
+function setTool(t) {
+  if (draft && t !== "poly") { draft = null; hideDrawbar(); }
+  tool = t; document.querySelectorAll("[data-tool]").forEach(b => b.setAttribute("aria-pressed", b.dataset.tool === t));
+  updateAll(false);
+}
+document.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => setTool(b.dataset.tool));
+
+// ===================== controls =====================
+$("undo").onclick = undo; $("undo").disabled = true;
+function setNewMode(m) { newMode = m; document.querySelectorAll("[data-newmode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.newmode === m)); }
+document.querySelectorAll("[data-newmode]").forEach(b => b.onclick = () => setNewMode(b.dataset.newmode));
+document.querySelectorAll("#emode button").forEach(b => b.onclick = () => { const s = selS(); if (!s || s.mode === b.dataset.mode) return; save(); s.mode = b.dataset.mode; updateAll(); });
+function moveSel(d) { const s = selS(); if (!s) return; const i = shapes.indexOf(s), j = i + d; if (j < 0 || j >= shapes.length) return; save(); shapes.splice(i, 1); shapes.splice(j, 0, s); updateAll(); }
+$("up").onclick = () => moveSel(1); $("down").onclick = () => moveSel(-1);
+$("del").onclick = () => { if (selId == null) return; save(); shapes = shapes.filter(s => s.id !== selId); selId = null; updateAll(); };
+$("clear").onclick = () => { if (!shapes.length) return; save(); shapes = []; selId = null; nextId = 1; updateAll(); };
+$("snap").onchange = e => { snapStep = +e.target.value; updateAll(false); };
+$("bw").onchange = e => { view.w = +e.target.value; updateAll(false); };
+$("showMap").onchange = () => updateAll(false);
+$("showNm").onchange = () => updateAll(false);
+$("fit").onclick = fit;
+function fit() {
+  let xs = [P.x], ys = [P.y];
+  for (const s of shapes) for (const p of polyOf(s, 64)) { xs.push(p[0]); ys.push(p[1]); }
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const need = Math.max((x1 - x0) * 1.35, (y1 - y0) * 1.35 * W / H, 4);
+  const opts = [...$("bw").options].map(o => +o.value); view.w = opts.find(v => v >= need) || opts[opts.length - 1];
+  $("bw").value = view.w; view.cx = (x0 + x1) / 2; view.cy = (y0 + y1) / 2; updateAll(false);
+}
+function numIn(id, fn) {
+  const e = $(id);
+  e.addEventListener("focus", () => save());
+  e.addEventListener("input", () => { const v = parseFloat(e.value); if (isFinite(v)) { fn(v); updateAll(); } });
+  e.addEventListener("blur", () => updateAll());
+}
+numIn("px", v => P.x = v); numIn("py", v => P.y = v); numIn("pz", v => Z = Math.max(0, v));
+const selS = () => shapes.find(t => t.id === selId);
+numIn("eq", v => { const s = selS(); if (s) { s.q = v; lastQ = v; } });
+numIn("ex", v => { const s = selS(); if (s) s.x = v; }); numIn("ey", v => { const s = selS(); if (s) s.y = v; });
+numIn("eB", v => { const s = selS(); if (s && v > 0) s.B = v; }); numIn("eL", v => { const s = selS(); if (s && v > 0) s.L = v; });
+numIn("ecx", v => { const s = selS(); if (s) s.cx = v; }); numIn("ecy", v => { const s = selS(); if (s) s.cy = v; });
+numIn("eR", v => { const s = selS(); if (s && v > 0) s.R = v; });
+$("ept").addEventListener("focus", () => save());
+$("ept").addEventListener("change", () => {
+  const s = selS(); if (!s) return;
+  const pts = $("ept").value.split(/[\n;]+/).map(l => l.trim()).filter(Boolean).map(l => l.split(/[\s,]+/).map(Number));
+  if (pts.length >= 3 && pts.every(p => p.length === 2 && p.every(isFinite)) && Math.abs(area2(pts)) > 1e-9) { s.pts = pts; $("eptMsg").textContent = "Applied."; updateAll(); }
+  else $("eptMsg").textContent = "Need at least three x, y pairs enclosing an area.";
+});
+document.addEventListener("keydown", e => {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !typing) { e.preventDefault(); undo(); return; }
+  if (typing) return;
+  if (e.key === "Escape") { if (draft) { draft = null; hideDrawbar(); updateAll(false); } else setTool("select"); }
+  if (e.key === "Enter" && draft && draft.type === "poly") finishPoly();
+  if ((e.key === "Delete" || e.key === "Backspace") && selId != null) { e.preventDefault(); $("del").click(); }
+  const t = { v: "select", r: "rect", c: "circle", g: "poly" }[e.key.toLowerCase()]; if (t && !e.ctrlKey && !e.metaKey) setTool(t);
+  const m = { a: "add", s: "sub" }[e.key.toLowerCase()]; if (m && !e.ctrlKey && !e.metaKey) setNewMode(m);
+});
+
+// ===================== presets =====================
+const PRESETS = {
+  rect: { shapes: [{ type: "rect", x: 0, y: 0, B: 2, L: 3, q: 100 }], P: { x: 1, y: 1.5 }, Z: 2 },
+  L: { shapes: [{ type: "poly", pts: [[0, 0], [8, 0], [8, 3], [3, 3], [3, 7], [0, 7]], q: 80 }], P: { x: 4.5, y: 4.5 }, Z: 3 },
+  tank: { shapes: [{ type: "circle", cx: 0, cy: 0, R: 5, q: 120 }], P: { x: 5, y: 0 }, Z: 4 },
+  opening: { shapes: [{ type: "rect", x: 0, y: 0, B: 10, L: 8, q: 60 }, { type: "circle", cx: 5, cy: 4, R: 2, q: 60, mode: "sub" }], P: { x: 5, y: 4 }, Z: 3 },
+  pads: { shapes: [{ type: "rect", x: 0, y: 0, B: 1, L: 9, q: 150 }, { type: "rect", x: 3.5, y: 0.5, B: 2, L: 2, q: 250 }, { type: "rect", x: 3.5, y: 6.5, B: 2, L: 2, q: 250 }], P: { x: 4.5, y: 4.5 }, Z: 2 },
+};
+function loadPreset(name, first) {
+  if (!first) save();
+  const p = JSON.parse(JSON.stringify(PRESETS[name]));
+  shapes = p.shapes.map((s, i) => ({ mode: "add", ...s, id: i + 1 })); nextId = shapes.length + 1; selId = null; P = p.P; Z = p.Z; lastQ = shapes[0].q; setNewMode("add");
+  setTool("select"); fit(); updateAll();
+}
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => loadPreset(b.dataset.preset));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => updateAll());
+loadPreset("rect", true);
+</script>
+</body>
+</html>
