@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soil Classification Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: the soil data on the left, the student's answer and feedback on the right; stacks on phones. */
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2330; --muted: #5b6676; --rule: #d9dee6;
+  --accent: #1f4fbf; --accent-soft: #e6ecfa;
+  --ok: #1d7a46; --ok-soft: #e3f4ea; --bad: #b42318; --bad-soft: #fbe9e7; --hint: #8a5a00; --hint-soft: #fdf3e1;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643;
+    --accent: #8fb0ff; --accent-soft: #1f2b44;
+    --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1f1f; --hint: #f5c26b; --hint-soft: #33291a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643;
+  --accent: #8fb0ff; --accent-soft: #1f2b44;
+  --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1f1f; --hint: #f5c26b; --hint-soft: #33291a;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); padding-inline: 16px; padding-block: 16px 28px; }
+.wrap { max-width: 1060px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font: 600 1rem var(--font-body); margin: 0; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; align-items: start; }
+@media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.panel > * { min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, .btn { font: 500 0.85rem var(--font-body); border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 6px 10px; }
+select { background: var(--bg); }
+.btn { cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn.primary:hover { color: var(--panel); filter: brightness(1.08); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; justify-self: start; }
+.seg button { font: 500 0.85rem var(--font-body); padding: 7px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg .tick { color: var(--ok); margin-left: 4px; }
+.scroll { overflow-x: auto; max-width: 100%; }
+table { border-collapse: collapse; font: 0.82rem var(--font-data); font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; }
+th:first-child, td:first-child { text-align: left; }
+.note { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+.field { display: grid; gap: 3px; min-width: 0; }
+.field label { font-size: 0.78rem; color: var(--muted); }
+.field label i, .note i { font-family: var(--font-display); }
+.inp { min-width: 0; display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 0.95rem var(--font-data); padding: 7px 8px; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 8px; color: var(--muted); font-size: 0.8rem; }
+.inp.ok { border-color: var(--ok); } .inp.bad { border-color: var(--bad); }
+.answer { display: grid; grid-template-columns: minmax(90px, 0.6fr) minmax(0, 2fr); gap: 10px; }
+@media (max-width: 480px) { .answer { grid-template-columns: minmax(0, 1fr); } }
+.answer .inp input { font-family: var(--font-body); }
+#symbol { font-family: var(--font-data) !important; text-transform: uppercase; }
+fieldset { border: 1px dashed var(--rule); border-radius: 8px; padding: 10px 12px 12px; margin: 0; }
+legend { font-size: 0.8rem; color: var(--muted); padding: 0 4px; }
+.fb { display: grid; gap: 8px; }
+.msg { border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; border-left: 4px solid; }
+.msg.ok { background: var(--ok-soft); border-color: var(--ok); }
+.msg.bad { background: var(--bad-soft); border-color: var(--bad); }
+.msg.hint { background: var(--hint-soft); border-color: var(--hint); }
+.msg b { font-weight: 600; }
+.msg p { margin: 0; }
+.msg p + p { margin-top: 4px; }
+.sol { display: grid; gap: 6px; font-size: 0.9rem; }
+.sol ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.sol .final { font-weight: 600; }
+.mono { font-family: var(--font-data); }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 8px; font-size: 0.88rem; max-width: 80ch; }
+.dbody p, .dbody ul { margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Soil classification checker</h1>
+    <p class="lede">Classify the soil yourself, then check your answer here. If something is wrong, you get a question pointing at the first decision to revisit, not the answer. Ask for a hint if you are stuck, and look at the full solution only when you have tried.</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="Soil data">
+      <h2>1. Choose a soil</h2>
+      <div class="row">
+        <select id="pick" aria-label="Soil to classify"></select>
+        <button class="btn" id="newRandom">New random soil</button>
+      </div>
+      <div id="dataView"></div>
+      <div id="ownData" hidden>
+        <p class="note">Enter the data for your soil. Leave <i>C<sub>u</sub></i> and <i>C<sub>c</sub></i> empty if they are not available.</p>
+        <div class="fields">
+          <div class="field"><label for="o475">% passing 4.75 mm</label><div class="inp"><input id="o475" type="number" step="0.1" inputmode="decimal"></div></div>
+          <div class="field"><label for="o236">% passing 2.36 mm</label><div class="inp"><input id="o236" type="number" step="0.1" inputmode="decimal"></div></div>
+          <div class="field"><label for="o075">% passing 0.075 mm</label><div class="inp"><input id="o075" type="number" step="0.1" inputmode="decimal"></div></div>
+          <div class="field"><label for="oll"><i>LL</i> (blank if NP)</label><div class="inp"><input id="oll" type="number" step="1" inputmode="decimal"></div></div>
+          <div class="field"><label for="opl"><i>PL</i> (blank if NP)</label><div class="inp"><input id="opl" type="number" step="1" inputmode="decimal"></div></div>
+          <div class="field"><label for="ocu"><i>C<sub>u</sub></i></label><div class="inp"><input id="ocu" type="number" step="0.1" inputmode="decimal"></div></div>
+          <div class="field"><label for="occ"><i>C<sub>c</sub></i></label><div class="inp"><input id="occ" type="number" step="0.01" inputmode="decimal"></div></div>
+        </div>
+      </div>
+      <p class="note">All soils here are inorganic. Use the plasticity chart in the book, or the interactive plasticity chart, to identify the fines.</p>
+    </section>
+
+    <section class="panel" aria-label="Your answer">
+      <h2>2. Enter your classification</h2>
+      <div class="seg" role="group" aria-label="Classification system">
+        <button data-sys="uscs" aria-pressed="true">USCS (ASTM D2487)<span class="tick" id="tick-uscs" hidden>✓</span></button>
+        <button data-sys="as" aria-pressed="false">AS 1726<span class="tick" id="tick-as" hidden>✓</span></button>
+      </div>
+      <fieldset>
+        <legend>Your calculated values (optional, but they help the feedback)</legend>
+        <div class="fields">
+          <div class="field"><label for="vff">Fine fraction <i>FF</i></label><div class="inp" id="w-vff"><input id="vff" type="number" step="0.1" inputmode="decimal"><span class="unit">%</span></div></div>
+          <div class="field"><label for="vgf">Gravel fraction <i>GF</i></label><div class="inp" id="w-vgf"><input id="vgf" type="number" step="0.1" inputmode="decimal"><span class="unit">%</span></div></div>
+          <div class="field"><label for="vsf">Sand fraction <i>SF</i></label><div class="inp" id="w-vsf"><input id="vsf" type="number" step="0.1" inputmode="decimal"><span class="unit">%</span></div></div>
+          <div class="field"><label for="vpi">Plasticity index <i>PI</i></label><div class="inp" id="w-vpi"><input id="vpi" type="number" step="0.1" inputmode="decimal"></div></div>
+        </div>
+      </fieldset>
+      <div class="answer">
+        <div class="field"><label for="symbol">Group symbol</label><div class="inp" id="w-symbol"><input id="symbol" autocomplete="off" spellcheck="false" placeholder="e.g. SC"></div></div>
+        <div class="field"><label for="gname">Group name</label><div class="inp" id="w-gname"><input id="gname" autocomplete="off" placeholder="e.g. clayey sand with gravel"></div></div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="check">Check my answer</button>
+        <button class="btn" id="hint" disabled>Give me a hint</button>
+        <button class="btn" id="solve" disabled>Show the solution</button>
+      </div>
+      <div class="fb" id="fb" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <details>
+    <summary>How the checker works</summary>
+    <div class="dbody">
+      <p>The checker classifies the soil itself, following the rules in the chapter, and compares your answer with each decision in turn: coarse or fine, gravel or sand, the amount of fines, the grading, and the type and plasticity of the fines. It tells you about the first decision that does not match, as a question. A hint then shows the numbers behind that decision. The full solution is available after your first attempt.</p>
+      <p>Group names are compared by their parts, so word order, capitals, hyphens and commas do not matter: “poorly graded sand with silt and gravel” and “Poorly-graded SAND with gravel and silt” are treated the same. In AS 1726 the primary component should still be written in capitals when you write it up.</p>
+      <p>Random soils are generated well away from every boundary in the classification rules, so each has one clear answer. Percentages are accepted within ±1 (±2 for values read from a graph).</p>
+    </div>
+  </details>
+</div>
+
+<script>
+// =====================================================================
+// Classification rules (as in the chapter). All soils are inorganic.
+// =====================================================================
+const A_LINE = ll => 0.73 * (ll - 20);
+const r1 = v => (Math.round(v * 10) / 10).toString();
+const pct = v => r1(v) + "%";
+
+function finesType(s) {               // "M" or "C" (or "CM" for the hatched zone), plus the numbers
+  if (s.ll == null) return { t: "M", np: true };
+  const pi = s.ll - s.pl, a = A_LINE(s.ll);
+  if (pi >= 4 && pi <= 7 && pi >= a) return { t: "CM", pi, a };
+  return { t: pi > 7 && pi >= a ? "C" : "M", pi, a };
+}
+
+function classifyUSCS(s) {
+  const steps = [], FF = s.p075, CF = 100 - FF, GF = 100 - s.p475, SF = s.p475 - FF, f = finesType(s);
+  const D = { FF, GF, SF, CF, PI: f.np ? null : f.pi };
+  const plasticTxt = f.np ? "The fines are non-plastic, so they behave as silt (M)." :
+    `PI = ${s.ll} − ${s.pl} = ${r1(f.pi)}; the A-line at LL = ${s.ll} gives PI = ${r1(f.a)}, so the fines plot ${f.pi >= f.a ? "on or above" : "below"} the A-line → ${f.t === "C" ? "clay (C)" : f.t === "CM" ? "silty clay (CL-ML)" : "silt (M)"}.`;
+  if (CF > 50) {
+    steps.push(`FF = ${pct(FF)}, so CF = ${pct(CF)} > 50% → coarse-grained.`);
+    const big = GF > SF ? "G" : "S", bigN = big === "G" ? "gravel" : "sand", oth = big === "G" ? "sand" : "gravel", othF = big === "G" ? SF : GF;
+    steps.push(`GF = 100 − ${s.p475} = ${pct(GF)} (retained on 4.75 mm) and SF = ${s.p475} − ${FF} = ${pct(SF)} → ${GF > SF ? "GF > SF" : "SF ≥ GF"} → ${bigN} (${big}).`);
+    let sym, name, grading = null, fl = null;
+    const gradeTest = () => {
+      if (s.cu == null) return null;
+      const lim = big === "G" ? 4 : 6, w = s.cu >= lim && s.cc >= 1 && s.cc <= 3;
+      steps.push(`Cu = ${s.cu} (needs ≥ ${lim}) and Cc = ${s.cc} (needs 1 to 3) → ${w ? "well graded (W)" : "poorly graded (P)"}.`);
+      return w ? "W" : "P";
+    };
+    if (FF < 5) {
+      steps.push(`FF = ${pct(FF)} < 5% → the fines are not considered; the second letter shows the grading.`);
+      grading = gradeTest(); sym = big + grading;
+      name = `${grading === "W" ? "well graded" : "poorly graded"} ${bigN}`;
+    } else if (FF <= 12) {
+      steps.push(`5% ≤ FF = ${pct(FF)} ≤ 12% → dual symbol: grading first, then the fines.`);
+      grading = gradeTest(); steps.push(plasticTxt);
+      fl = f.t === "M" ? "M" : "C";
+      sym = `${big}${grading}-${big}${fl}`;
+      name = `${grading === "W" ? "well graded" : "poorly graded"} ${bigN} with ${f.t === "M" ? "silt" : f.t === "CM" ? "silty clay" : "clay"}`;
+    } else {
+      steps.push(`FF = ${pct(FF)} > 12% → the second letter shows the type of fines.`);
+      steps.push(plasticTxt);
+      fl = f.t;
+      if (f.t === "CM") { sym = `${big}C-${big}M`; name = `silty clayey ${bigN}`; }
+      else { sym = big + f.t; name = `${f.t === "C" ? "clayey" : "silty"} ${bigN}`; }
+    }
+    if (othF >= 15) { name += name.includes(" with ") ? ` and ${oth}` : ` with ${oth}`; steps.push(`The ${oth} fraction is ${pct(othF)} ≥ 15% → add “${oth}” to the name.`); }
+    else steps.push(`The ${oth} fraction is ${pct(othF)} < 15% → no ${oth} term in the name.`);
+    return { sys: "uscs", sym, name, steps, D, dec: { coarse: true, big, fines: FF < 5 ? "clean" : FF <= 12 ? "dual" : "fines", grading, fl, fNum: f, CF, GF, SF, FF, othF, oth } };
+  }
+  steps.push(`FF = ${pct(FF)} ≥ 50% → fine-grained.`);
+  steps.push(plasticTxt);
+  const lvl = s.ll < 50 ? "L" : "H";
+  let sym, base;
+  if (f.t === "CM") { sym = "CL-ML"; base = "silty clay"; }
+  else { sym = (f.t === "C" ? "C" : "M") + lvl; base = { CL: "lean clay", CH: "fat clay", ML: "silt", MH: "elastic silt" }[sym]; }
+  if (f.t !== "CM") steps.push(`LL = ${s.ll} ${lvl === "L" ? "< 50 → low plasticity (L)" : "≥ 50 → high plasticity (H)"} → ${sym}.`);
+  const plus = 100 - FF, sandy = SF >= GF; let name;
+  if (plus < 15) { name = base; steps.push(`Coarse fraction ${pct(plus)} < 15% → no sand or gravel terms.`); }
+  else if (plus < 30) { name = `${base} with ${sandy ? "sand" : "gravel"}`; steps.push(`Coarse fraction ${pct(plus)} is 15–29% and ${sandy ? "SF ≥ GF" : "GF > SF"} → “with ${sandy ? "sand" : "gravel"}”.`); }
+  else {
+    const o = sandy ? GF : SF;
+    name = `${sandy ? "sandy" : "gravelly"} ${base}` + (o >= 15 ? ` with ${sandy ? "gravel" : "sand"}` : "");
+    steps.push(`Coarse fraction ${pct(plus)} ≥ 30% and ${sandy ? "SF ≥ GF" : "GF > SF"} → prefix “${sandy ? "sandy" : "gravelly"}”${o >= 15 ? `; the ${sandy ? "gravel" : "sand"} fraction ${pct(o)} ≥ 15% → add “with ${sandy ? "gravel" : "sand"}”` : ""}.`);
+  }
+  return { sys: "uscs", sym, name, steps, D, dec: { coarse: false, ft: f.t, lvl, fNum: f, CF, GF, SF, FF, plus } };
+}
+
+function classifyAS(s) {
+  const steps = [], FF = s.p075, CF = 100 - FF, GF = 100 - s.p236, SF = s.p236 - FF, f = finesType(s);
+  const D = { FF, GF, SF, CF, PI: f.np ? null : f.pi };
+  const plasticTxt = f.np ? "The fines are non-plastic, so they behave as silt." :
+    `PI = ${s.ll} − ${s.pl} = ${r1(f.pi)}; the A-line at LL = ${s.ll} gives PI = ${r1(f.a)}, so the fines plot ${f.pi >= f.a ? "on or above" : "below"} the A-line → ${f.t === "M" ? "silt" : "clay"}.`;
+  const acc = (v, n, pre, post) => { if (v > 30) pre.push(n === "sand" ? "sandy" : n === "gravel" ? "gravelly" : n === "clay" ? "clayey" : "silty"); else if (v > 15) post.push("with " + n); else if (v > 0) post.push("trace " + n); };
+  if (CF > 65) {
+    steps.push(`FF = ${pct(FF)}, so CF = ${pct(CF)} > 65% → coarse-grained.`);
+    const big = GF > SF ? "G" : "S", bigN = big === "G" ? "GRAVEL" : "SAND", oth = big === "G" ? "sand" : "gravel", othF = big === "G" ? SF : GF;
+    steps.push(`GF = 100 − ${s.p236} = ${pct(GF)} (retained on 2.36 mm) and SF = ${s.p236} − ${FF} = ${pct(SF)} → ${GF > SF ? "GF > SF → GRAVEL (G)" : "SF ≥ GF → SAND (S)"}.`);
+    const fn = f.t === "M" ? "silt" : "clay";
+    let grading = null, sym;
+    const gradeTest = () => {
+      const lim = big === "G" ? 4 : 6, w = s.cu > lim && s.cc > 1 && s.cc < 3;
+      steps.push(`Cu = ${s.cu} (needs > ${lim}) and Cc = ${s.cc} (needs 1 to 3) → ${w ? "well graded (W)" : "poorly graded (P)"}.`);
+      return w ? "W" : "P";
+    };
+    const pre = [], post = [];
+    if (FF <= 5) { steps.push(`FF = ${pct(FF)} ≤ 5% → the second letter shows the grading.`); grading = gradeTest(); sym = big + grading; if (FF > 0) post.push("trace " + fn); }
+    else if (FF <= 12) { steps.push(`5% < FF = ${pct(FF)} ≤ 12% → dual symbol: grading first, then the fines.`); grading = gradeTest(); steps.push(plasticTxt); sym = `${big}${grading}-${big}${f.t === "M" ? "M" : "C"}`; post.push("with " + fn); }
+    else { steps.push(`FF = ${pct(FF)} > 12% → the second letter shows the type of fines.`); steps.push(plasticTxt); sym = big + (f.t === "M" ? "M" : "C"); pre.push(fn === "clay" ? "clayey" : "silty"); }
+    if (FF > 5 && FF <= 12) {} // fines term already added
+    steps.push(`Fines ${pct(FF)}: ${FF <= 5 ? "≤ 5% → “trace " + fn + "”" : FF <= 12 ? "5–12% → “with " + fn + "”" : "> 12% → prefix “" + (fn === "clay" ? "clayey" : "silty") + "”"}.`);
+    acc(othF, oth, pre, post);
+    steps.push(`Accessory ${oth} ${pct(othF)}: ${othF > 30 ? "> 30% → prefix “" + (oth === "sand" ? "sandy" : "gravelly") + "”" : othF > 15 ? "15–30% → “with " + oth + "”" : othF > 0 ? "≤ 15% → “trace " + oth + "”" : "none"}.`);
+    const name = [...pre.slice().reverse(), bigN].join(" ") + (post.length ? ", " + post.join(", ") : "");
+    return { sys: "as", sym, name, steps, D, dec: { coarse: true, big, fines: FF <= 5 ? "clean" : FF <= 12 ? "dual" : "fines", grading, fl: f.t === "M" ? "M" : "C", fNum: f, CF, GF, SF, FF, othF, oth } };
+  }
+  steps.push(`FF = ${pct(FF)} ≥ 35% (CF = ${pct(CF)} ≤ 65%) → fine-grained.`);
+  steps.push(plasticTxt);
+  const isClay = f.t !== "M";
+  const lvl = isClay ? (s.ll <= 35 ? "L" : s.ll <= 50 ? "I" : "H") : (s.ll <= 50 ? "L" : "H");
+  const sym = (isClay ? "C" : "M") + lvl, word = { L: "low", I: "medium", H: "high" }[lvl];
+  steps.push(`LL = ${s.ll} → ${word} plasticity (${lvl}) → ${sym}.`);
+  const pre = [], post = [];
+  acc(SF, "sand", pre, post); acc(GF, "gravel", pre, post);
+  steps.push(`Sand ${pct(SF)} and gravel ${pct(GF)}: > 30% → prefix, 15–30% → “with”, ≤ 15% → “trace”.`);
+  const name = [...pre, isClay ? "CLAY" : "SILT"].join(" ") + ` of ${word} plasticity` + (post.length ? ", " + post.join(", ") : "");
+  return { sys: "as", sym, name, steps, D, dec: { coarse: false, ft: isClay ? "C" : "M", lvl, fNum: f, CF, GF, SF, FF } };
+}
+
+// =====================================================================
+// Parsing and comparing the student's answer
+// =====================================================================
+function parseSymbol(x) {
+  x = (x || "").toUpperCase().replace(/[\s]/g, "").replace(/[–—]/g, "-");
+  const ok = /^(G|S)(W|P|M|C)(-(G|S)(M|C))?$|^(CL|CI|CH|ML|MH|CL-ML)$/.test(x);
+  if (!ok) return { valid: false, raw: x };
+  if (x[0] === "G" || x[0] === "S") {
+    const parts = x.split("-");
+    if (parts.length === 2) {
+      if ("WP".includes(parts[0][1])) return { valid: true, raw: x, coarse: true, big: x[0], fines: "dual", grading: parts[0][1], fl: parts[1][1], bigConsistent: parts[1][0] === x[0] };
+      return { valid: true, raw: x, coarse: true, big: x[0], fines: "fines", fl: "CM", bigConsistent: parts[1][0] === x[0] };   // e.g. SC-SM
+    }
+    if ("WP".includes(x[1])) return { valid: true, raw: x, coarse: true, big: x[0], fines: "clean", grading: x[1] };
+    return { valid: true, raw: x, coarse: true, big: x[0], fines: "fines", fl: x[1] };
+  }
+  if (x === "CL-ML") return { valid: true, raw: x, coarse: false, ft: "CM", lvl: "L" };
+  return { valid: true, raw: x, coarse: false, ft: x[0], lvl: x[1] };
+}
+
+const norm = t => " " + (t || "").toLowerCase().replace(/well-graded|well graded/g, "wellgraded").replace(/poorly-graded|poorly graded/g, "poorlygraded")
+  .replace(/intermediate/g, "medium").replace(/[,.;:()]/g, " ").replace(/-/g, " ").replace(/trace of/g, "trace").replace(/\s+/g, " ").trim() + " ";
+
+function nameParts(t, sys) {
+  let s = norm(t);
+  const out = { pre: [], base: "", withs: [], traces: [], plast: "" };
+  if (sys === "as") {
+    const m = s.match(/(?:of |with )?(low|medium|high) plasticity/);
+    if (m) { out.plast = m[1]; s = s.replace(m[0], " "); }
+    s = s.replace(/ (with|trace) (sand|gravel|silt|clay|fines)(?= )/g, (_, k, w) => { (k === "with" ? out.withs : out.traces).push(w); return " "; });
+    s = s.replace(/ and (sand|gravel|silt|clay)(?= )/g, (_, w) => { out.withs.push(w); return " "; });
+    const words = s.trim().split(" ").filter(Boolean);
+    out.base = words.pop() || ""; out.pre = words;
+  } else {
+    const i = s.indexOf(" with ");
+    let head = s, tail = "";
+    if (i >= 0) { head = s.slice(0, i); tail = s.slice(i + 6); }
+    out.withs = tail.split(/ and /).map(w => w.trim()).filter(Boolean);
+    head = head.trim();
+    const bases = ["elastic silt", "lean clay", "fat clay", "silty clay", "gravel", "sand", "silt", "clay"];
+    for (const b of bases) if (head === b || head.endsWith(" " + b)) { out.base = b; head = head.slice(0, head.length - b.length).trim(); break; }
+    if (!out.base) { const w = head.split(" "); out.base = w.pop(); head = w.join(" "); }
+    out.pre = head.split(" ").filter(Boolean);
+  }
+  out.pre.sort(); out.withs.sort(); out.traces.sort();
+  return out;
+}
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// first decision where the student's symbol differs, with a question and a numeric hint
+function symbolFeedback(st, ans, sys, soil) {
+  const d = ans.dec, U = sys === "uscs";
+  const sieve = U ? "4.75 mm" : "2.36 mm", cfLim = U ? "50%" : "65%";
+  if (!st.valid) return { q: "That is not a valid group symbol. Group symbols look like GW, SP, SM, GC, GP-GM, CL, CI, MH or CL-ML.", h: "" };
+  if (st.coarse !== d.coarse)
+    return { q: `Is this soil coarse-grained or fine-grained? In ${U ? "the USCS" : "AS 1726"}, a soil is coarse-grained if its coarse fraction is more than ${cfLim}.`, h: `FF = ${pct(d.FF)}, so CF = ${pct(d.CF)}.` };
+  if (d.coarse) {
+    if (st.big !== d.big) return { q: `Is it a gravel or a sand? Compare the gravel and sand fractions. Which sieve separates gravel from sand in ${U ? "the USCS" : "AS 1726"}?`, h: `${U ? "The USCS" : "AS 1726"} uses the ${sieve} sieve: GF = ${pct(d.GF)} and SF = ${pct(d.SF)}.` };
+    if (st.fines !== d.fines) return { q: `How much fines does the soil contain? The fines content decides whether the second letter shows the grading (${U ? "< 5%" : "≤ 5%"}), a dual symbol is needed (5–12%), or the second letter shows the type of fines (> 12%).`, h: `FF = ${pct(d.FF)}.` };
+    if (d.fines === "dual" && st.raw && !/^(G|S)(W|P)-/.test(st.raw)) return { q: "In a dual symbol, the grading symbol comes first, then the fines symbol (e.g. SP-SM).", h: "" };
+    if (d.grading && st.grading !== d.grading) {
+      const lim = d.big === "G" ? 4 : 6;
+      return { q: `Is the ${d.big === "G" ? "gravel" : "sand"} well graded? Check both C<sub>u</sub> and C<sub>c</sub> against the criteria for a well-graded ${d.big === "G" ? "gravel" : "sand"}.`, h: `C<sub>u</sub> = ${soil.cu} (needs ${U ? "≥" : ">"} ${lim}); C<sub>c</sub> = ${soil.cc} (needs to be between 1 and 3).` };
+    }
+    const want = d.fines === "fines" ? (sys === "uscs" ? d.fl : d.fl) : d.fl;
+    if (d.fines !== "clean" && st.fl !== want) return { q: "Do the fines behave as silt or as clay? Locate them on the plasticity chart, or compare PI with the A-line.", h: d.fNum.np ? "The fines are non-plastic." : `PI = ${r1(d.fNum.pi)}; A-line at LL = ${soil.ll}: PI = ${r1(d.fNum.a)}.` };
+    if (st.bigConsistent === false) return { q: "Both parts of a dual symbol start with the same letter (e.g. GP-GM, not GP-SM).", h: "" };
+    return null;
+  }
+  const wantT = d.ft === "CM" ? "CM" : d.ft;
+  if (st.ft !== wantT) return { q: "Is it a silt or a clay? Locate the soil on the plasticity chart, or compare PI with the A-line.", h: d.fNum.np ? "The soil is non-plastic." : `PI = ${r1(d.fNum.pi)}; A-line at LL = ${soil.ll}: PI = ${r1(d.fNum.a)}${d.ft === "CM" ? " — and note that 4 ≤ PI ≤ 7" : ""}.` };
+  if (st.lvl !== d.lvl) return { q: `What is the plasticity? Check which range the liquid limit falls in. ${U ? "The USCS uses L for LL < 50 and H for LL ≥ 50." : d.ft === "C" ? "For clays, AS 1726 uses L for LL ≤ 35, I for 35 < LL ≤ 50 and H for LL > 50." : "For silts, AS 1726 uses L for LL ≤ 50 and H for LL > 50."}`, h: `LL = ${soil.ll}.` };
+  return null;
+}
+
+function nameFeedback(text, ans, sys) {
+  const a = nameParts(ans.name, sys), b = nameParts(text, sys), d = ans.dec, U = sys === "uscs";
+  if (!text.trim()) return { q: "Enter the group name as well as the symbol.", h: "" };
+  if (same(a, b)) return null;
+  if (a.base !== b.base) return { q: U ? "Check the main part of the name. It should match your group symbol (for example, CL is a lean clay and MH an elastic silt; G is gravel and S is sand)." : "Check the primary component of the name (CLAY, SILT, SAND or GRAVEL). It should match your group symbol.", h: "" };
+  if (a.plast !== b.plast) return { q: "Check the plasticity description in the name. It should agree with the second letter of the symbol (L, I or H).", h: `LL = ${d.fNum && d.fNum.np ? "NP" : ans.ll}.` };
+  if (!same(a.pre, b.pre)) {
+    if (U && d.coarse && d.fines !== "fines") return { q: "Check the start of the name. For a clean or dual-symbol soil it starts with the grading: “well graded …” or “poorly graded …”.", h: "" };
+    return { q: U ? (d.coarse ? "Check the word before the soil name: with more than 12% fines, the fines give a prefix (silty or clayey)." : "Check the prefix. With 30% or more sand and gravel, a fine-grained soil gets “sandy” or “gravelly”, whichever is larger.")
+                  : "Check the prefixes. In AS 1726 a secondary component (more than 30% sand or gravel, or more than 12% fines in a coarse soil) is added as a prefix such as sandy, gravelly, clayey or silty.",
+             h: `GF = ${pct(d.GF)}, SF = ${pct(d.SF)}, FF = ${pct(d.FF)}.` };
+  }
+  return { q: U ? "Check the “with …” part of the name. Which other components are 15% or more of the soil?" : "Check the terms for minor components. In AS 1726, “with” is used for 15–30% sand or gravel (5–12% fines in a coarse soil), and “trace” for smaller amounts.",
+           h: `GF = ${pct(d.GF)}, SF = ${pct(d.SF)}, FF = ${pct(d.FF)}.` };
+}
+
+// =====================================================================
+// Soils: chapter problems, random soils and the student's own data
+// =====================================================================
+const S23 = [9.5, 6.7, 4.75, 2.36, 1.18, 0.6, 0.425, 0.3, 0.15, 0.075];
+function dAt(sizes, pass, p) {
+  for (let i = 0; i < sizes.length - 1; i++) {
+    const a = pass[i], b = pass[i + 1];
+    if (a >= p && p >= b) { if (a === b) return sizes[i]; const t = (a - p) / (a - b); return 10 ** (Math.log10(sizes[i]) + t * (Math.log10(sizes[i + 1]) - Math.log10(sizes[i]))); }
+  }
+  return null;
+}
+function fromGrading(pass, ll, pl, label) {
+  const d10 = dAt(S23, pass, 10), d30 = dAt(S23, pass, 30), d60 = dAt(S23, pass, 60);
+  const s = { label, p475: pass[2], p236: pass[3], p075: pass[9], ll, pl, graph: true, grading: pass };
+  if (d10) { s.cu = +(d60 / d10).toFixed(1); s.cc = +(d30 * d30 / (d60 * d10)).toFixed(2); }
+  return s;
+}
+const P25m = [3.8, 11.1, 15.7, 14.4, 17.2, 24.6, 28.7, 10.3, 22.5, 43.8, 38.7, 46.2];
+const P25s = ["13.2", "9.50", "6.70", "4.75", "2.36", "1.18", "0.600", "0.425", "0.300", "0.150", "0.075", "Pan"];
+function p25() {
+  const t = P25m.reduce((a, b) => a + b, 0); let r = t; const pass = [];
+  for (const m of P25m.slice(0, -1)) { r -= m; pass.push(r / t * 100); }
+  return { label: "Problem 2.5", p475: +pass[3].toFixed(1), p236: +pass[4].toFixed(1), p075: +pass[10].toFixed(1), ll: 34, pl: 17, masses: true };
+}
+const CHAPTER = {
+  "2.1A": { label: "Problem 2.1, soil A", p475: 96, p236: 90, p075: 72, ll: 48, pl: 22 },
+  "2.1B": { label: "Problem 2.1, soil B", p475: 85, p236: 78, p075: 42, ll: 38, pl: 24 },
+  "2.1C": { label: "Problem 2.1, soil C", p475: 55, p236: 45, p075: 8, ll: 30, pl: 26, cu: 15, cc: 0.8 },
+  "2.1D": { label: "Problem 2.1, soil D", p475: 30, p236: 22, p075: 3, ll: null, pl: null, cu: 25, cc: 1.8 },
+  "2.1E": { label: "Problem 2.1, soil E", p475: 100, p236: 98, p075: 88, ll: 62, pl: 38 },
+  "2.3A": fromGrading([100, 96, 91, 78, 62, 40, 28, 20, 11, 4], null, null, "Problem 2.3, soil A"),
+  "2.3B": fromGrading([100, 100, 99, 97, 90, 72, 55, 38, 18, 7], 28, 16, "Problem 2.3, soil B"),
+  "2.3C": fromGrading([100, 85, 62, 50, 46, 44, 42, 38, 30, 22], 41, 19, "Problem 2.3, soil C"),
+  "2.5": p25(),
+};
+
+// random soil, well away from every boundary in both systems
+const rnd = (a, b) => a + Math.random() * (b - a), ri = (a, b) => Math.round(rnd(a, b));
+const far = (v, edges, m) => edges.every(e => Math.abs(v - e) >= m);
+function randomSoil() {
+  for (let k = 0; k < 5000; k++) {
+    const kind = Math.random();
+    let FF;
+    if (kind < 0.35) FF = ri(1, 9); else if (kind < 0.65) FF = ri(14, 45); else FF = ri(52, 95);
+    const coarseLeft = 100 - FF;
+    const GF4 = ri(0, coarseLeft), p475 = 100 - GF4;                 // gravel by 4.75 mm
+    const between = ri(0, Math.min(25, p475 - FF)), p236 = p475 - between; // 2.36–4.75 mm material
+    const s = { p475, p236, p075: FF };
+    // plasticity: clear silts or clays, avoiding the CL-ML zone
+    if (Math.random() < 0.12 && FF < 50) { s.ll = null; s.pl = null; }
+    else {
+      s.ll = ri(22, 85); const a = A_LINE(s.ll);
+      const clay = Math.random() < 0.6; let pi = clay ? ri(Math.ceil(Math.max(a + 3, 10)), Math.floor(0.9 * (s.ll - 8) - 2)) : ri(Math.max(1, 0), Math.floor(a - 3));
+      if (!(pi > 0) || pi >= s.ll) continue;
+      if (pi >= 3 && pi <= 9) continue;
+      if (!far(s.ll, [35, 50], 3)) continue;
+      s.pl = s.ll - pi;
+    }
+    if (FF < 10) { s.cu = +rnd(2, 30).toFixed(1); s.cc = +rnd(0.4, 3.8).toFixed(2); if (!far(s.cu, [4, 6], 0.8) || !far(s.cc, [1, 3], 0.2)) continue; }
+    // boundaries in both systems
+    const U = { GF: 100 - s.p475, SF: s.p475 - FF }, AS = { GF: 100 - s.p236, SF: s.p236 - FF };
+    if (!far(100 - FF, [50, 65], 3) || !far(FF, [5, 12, 35], 1.5)) continue;
+    if (Math.abs(U.GF - U.SF) < 4 || Math.abs(AS.GF - AS.SF) < 4) continue;
+    if (!far(U.GF, [15, 30], 2) || !far(U.SF, [15, 30], 2) || !far(AS.GF, [15, 30], 2) || !far(AS.SF, [15, 30], 2)) continue;
+    if (!far(100 - FF, [15, 30], 2)) continue;
+    if (s.ll == null && FF >= 35) continue;
+    s.label = "Random soil";
+    return s;
+  }
+  return CHAPTER["2.1A"];
+}
+
+// =====================================================================
+// UI
+// =====================================================================
+const $ = id => document.getElementById(id);
+let soil = null, sys = "uscs";
+const state = { uscs: { tries: 0, hint: 0, done: false, last: null }, as: { tries: 0, hint: 0, done: false, last: null } };
+
+function buildPicker() {
+  const sel = $("pick");
+  const groups = [["Chapter 2 problems", Object.keys(CHAPTER).map(k => [k, CHAPTER[k].label])], ["Practice", [["random", "Random soil"], ["own", "Enter my own data"]]]];
+  for (const [g, items] of groups) { const og = document.createElement("optgroup"); og.label = g; for (const [v, t] of items) { const o = document.createElement("option"); o.value = v; o.textContent = t; og.appendChild(o); } sel.appendChild(og); }
+  sel.onchange = () => loadSoil(sel.value);
+}
+const cell = v => v == null ? "NP" : v;
+function showData() {
+  const v = $("dataView"); v.textContent = "";
+  if (!soil) return;
+  let html = "";
+  if (soil.masses) {
+    html += `<p class="note">${soil.label}: mass retained on each sieve (g). Atterberg limits of the fines: <i>LL</i> = ${soil.ll}, <i>PL</i> = ${soil.pl}.</p><div class="scroll"><table><thead><tr><th>Sieve (mm)</th>${P25s.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody><tr><td>Mass (g)</td>${P25m.map(x => `<td>${x}</td>`).join("")}</tr></tbody></table></div>`;
+  } else if (soil.graph) {
+    html += `<p class="note">${soil.label}: percent passing. Plot the curve and read <i>D</i><sub>10</sub>, <i>D</i><sub>30</sub> and <i>D</i><sub>60</sub> where you need them.</p><div class="scroll"><table><thead><tr><th>Sieve (mm)</th>${S23.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody><tr><td>% passing</td>${soil.grading.map(x => `<td>${x}</td>`).join("")}</tr></tbody></table></div><p class="note"><i>LL</i> = ${cell(soil.ll)}, <i>PL</i> = ${cell(soil.pl)}</p>`;
+  } else {
+    html += `<p class="note">${soil.label}</p><div class="scroll"><table><thead><tr><th></th><th>Value</th></tr></thead><tbody>
+      <tr><td>% passing 4.75 mm</td><td>${soil.p475}</td></tr>
+      <tr><td>% passing 2.36 mm</td><td>${soil.p236}</td></tr>
+      <tr><td>% passing 0.075 mm</td><td>${soil.p075}</td></tr>
+      <tr><td>Liquid limit, LL</td><td>${cell(soil.ll)}</td></tr>
+      <tr><td>Plastic limit, PL</td><td>${cell(soil.pl)}</td></tr>
+      <tr><td>Cu</td><td>${soil.cu ?? "–"}</td></tr>
+      <tr><td>Cc</td><td>${soil.cc ?? "–"}</td></tr></tbody></table></div>`;
+  }
+  v.innerHTML = html;
+}
+function readOwn() {
+  const g = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : null; };
+  const s = { label: "Your soil", p475: g("o475"), p236: g("o236"), p075: g("o075"), ll: g("oll"), pl: g("opl"), cu: g("ocu"), cc: g("occ") };
+  if (s.ll == null || s.pl == null) { s.ll = null; s.pl = null; }
+  return s;
+}
+function ownProblem(s) {
+  if ([s.p475, s.p236, s.p075].some(v => v == null)) return "Enter the three percentages passing.";
+  if (!(s.p475 >= s.p236 && s.p236 >= s.p075 && s.p475 <= 100 && s.p075 >= 0)) return "The percentages passing must decrease from the 4.75 mm sieve to the 0.075 mm sieve.";
+  if (s.ll != null && s.pl > s.ll) return "The plastic limit cannot be larger than the liquid limit.";
+  if (s.p075 <= 12 && 100 - s.p075 > 50 && (s.cu == null || s.cc == null)) return "This soil needs Cu and Cc for its grading.";
+  return null;
+}
+function resetAnswer() {
+  for (const k of ["uscs", "as"]) state[k] = { tries: 0, hint: 0, done: false, last: null, inputs: {} };
+  ["tick-uscs", "tick-as"].forEach(id => $(id).hidden = true);
+  clearInputs(); $("fb").textContent = ""; $("hint").disabled = true; $("solve").disabled = true;
+}
+function clearInputs() { for (const id of ["vff", "vgf", "vsf", "vpi", "symbol", "gname"]) { $(id).value = ""; $("w-" + id).className = "inp"; } }
+function loadSoil(v) {
+  $("ownData").hidden = v !== "own"; $("newRandom").hidden = v !== "random";
+  if (v === "own") soil = null;
+  else soil = v === "random" ? randomSoil() : CHAPTER[v];
+  showData(); resetAnswer();
+}
+function saveInputs() { const o = {}; for (const id of ["vff", "vgf", "vsf", "vpi", "symbol", "gname"]) o[id] = $(id).value; state[sys].inputs = o; }
+function restoreInputs() { clearInputs(); const o = state[sys].inputs || {}; for (const id in o) $(id).value = o[id]; renderFeedback(); }
+
+function answerFor() { const s = soil || readOwn(); return { s, ans: (sys === "uscs" ? classifyUSCS : classifyAS)(s) }; }
+
+function check() {
+  if (!soil) { const s = readOwn(), err = ownProblem(s); if (err) { $("fb").innerHTML = `<div class="msg bad"><p>${err}</p></div>`; return; } }
+  const { s, ans } = answerFor(); ans.ll = s.ll;
+  const st = state[sys]; st.tries++; st.hint = 0;
+  const msgs = [];
+  // calculated values
+  const tol = s.graph || s.masses ? 1.0 : 1.0;
+  const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : null; };
+  const vals = [["vff", ans.D.FF, "the fine fraction: the percentage passing the 0.075 mm sieve"],
+                ["vgf", ans.D.GF, `the gravel fraction: the percentage retained on the ${sys === "uscs" ? "4.75 mm" : "2.36 mm"} sieve`],
+                ["vsf", ans.D.SF, `the sand fraction: passing the ${sys === "uscs" ? "4.75 mm" : "2.36 mm"} sieve but retained on the 0.075 mm sieve`],
+                ["vpi", ans.D.PI, "the plasticity index: PI = LL − PL"]];
+  const wrongVals = [];
+  for (const [id, want, what] of vals) {
+    const v = num(id), w = $("w-" + id);
+    if (v == null) { w.className = "inp"; continue; }
+    if (want == null) { w.className = "inp bad"; wrongVals.push(`The soil is non-plastic, so there is no plasticity index.`); continue; }
+    const ok = Math.abs(v - want) <= tol + 1e-9; w.className = "inp " + (ok ? "ok" : "bad");
+    if (!ok) wrongVals.push(`Recheck ${what}.`);
+  }
+  const symSt = parseSymbol($("symbol").value);
+  const symFb = symbolFeedback(symSt, ans, sys, s);
+  const correctSym = symSt.valid && symSt.raw === ans.sym;
+  const symOk = !symFb && correctSym;
+  $("w-symbol").className = "inp " + ($("symbol").value ? (symOk ? "ok" : "bad") : "");
+  let nameFb = null;
+  if (symOk) nameFb = nameFeedback($("gname").value, ans, sys);
+  $("w-gname").className = "inp " + (symOk && $("gname").value ? (nameFb ? "bad" : "ok") : "");
+  st.last = { wrongVals, symFb: symOk ? null : (symFb || { q: "Check your group symbol against each decision again: coarse or fine, gravel or sand, the amount of fines, the grading, and the type of fines.", h: "" }), nameFb, symOk };
+  st.done = symOk && !nameFb && wrongVals.length === 0;
+  if (st.done) $("tick-" + sys).hidden = false;
+  $("hint").disabled = st.done || (!st.last.symFb && !st.last.nameFb) || !(st.last.symFb || st.last.nameFb).h;
+  $("solve").disabled = false;
+  renderFeedback();
+}
+
+function renderFeedback() {
+  const st = state[sys], fb = $("fb"); fb.textContent = "";
+  if (!st.last) { $("hint").disabled = true; $("solve").disabled = st.tries === 0; return; }
+  const L = st.last, out = [];
+  if (st.done) out.push(`<div class="msg ok"><p><b>Correct.</b> ${sys === "uscs" ? "Now try the AS 1726 classification of the same soil." : "Now compare it with the USCS classification of the same soil."}</p></div>`);
+  else {
+    if (L.wrongVals.length) out.push(`<div class="msg bad"><p><b>Your calculations:</b></p>${L.wrongVals.map(t => `<p>${t}</p>`).join("")}</div>`);
+    if (L.symFb) out.push(`<div class="msg bad"><p><b>Group symbol:</b> ${L.symFb.q}</p></div>`);
+    else if (L.nameFb) out.push(`<div class="msg ok"><p><b>Group symbol is correct.</b></p></div><div class="msg bad"><p><b>Group name:</b> ${L.nameFb.q}</p></div>`);
+    else if (L.symOk) out.push(`<div class="msg ok"><p><b>Group symbol and name are correct.</b> Recheck the values marked in red.</p></div>`);
+    const cur = L.symFb || L.nameFb;
+    if (st.hint >= 1 && cur && cur.h) out.push(`<div class="msg hint"><p><b>Hint:</b> ${cur.h}</p></div>`);
+  }
+  if (st.showSol) {
+    const { ans } = answerFor();
+    out.push(`<div class="msg hint sol"><p><b>Solution (${sys === "uscs" ? "USCS" : "AS 1726"})</b></p><ol>${ans.steps.map(x => `<li>${x}</li>`).join("")}</ol><p class="final">${ans.sym} — ${ans.name}</p></div>`);
+  }
+  fb.innerHTML = out.join("");
+}
+
+$("check").onclick = check;
+$("hint").onclick = () => { state[sys].hint = 1; $("hint").disabled = true; renderFeedback(); };
+$("solve").onclick = () => { state[sys].showSol = true; renderFeedback(); };
+$("newRandom").onclick = () => { soil = randomSoil(); showData(); resetAnswer(); };
+document.querySelectorAll("[data-sys]").forEach(b => b.onclick = () => {
+  saveInputs(); sys = b.dataset.sys;
+  document.querySelectorAll("[data-sys]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("symbol").placeholder = sys === "uscs" ? "e.g. SC" : "e.g. GC";
+  $("gname").placeholder = sys === "uscs" ? "e.g. clayey sand with gravel" : "e.g. clayey GRAVEL, with sand";
+  restoreInputs();
+});
+for (const id of ["o475", "o236", "o075", "oll", "opl", "ocu", "occ"]) $(id).addEventListener("input", () => resetAnswer());
+$("symbol").addEventListener("keydown", e => { if (e.key === "Enter") check(); });
+$("gname").addEventListener("keydown", e => { if (e.key === "Enter") check(); });
+
+buildPicker(); loadSoil("2.1A");
+// expose for testing
+window.__cc = { classifyUSCS, classifyAS, CHAPTER, randomSoil, nameParts, parseSymbol };
+</script>
+</body>
+</html>
