@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plasticity Chart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: inputs and classification on the left, the chart on the right; stacks on phones. */
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2330; --muted: #5b6676; --rule: #d9dee6; --grid: #e9ecf1;
+  --accent: #1f4fbf; --accent-soft: #e6ecfa; --point: #c2410c; --warn: #9a5b00; --warn-soft: #fdf3e1;
+  --clayL: #f6dede; --clayI: #f0c9c9; --clayH: #e8b3b3; --siltL: #dcefdc; --siltH: #c4e3c4; --clml: #e1e3e8;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+    --accent: #8fb0ff; --accent-soft: #1f2b44; --point: #fb923c; --warn: #f5c26b; --warn-soft: #33291a;
+    --clayL: #3a2526; --clayI: #4a2b2d; --clayH: #5a3134; --siltL: #22352a; --siltH: #2a4433; --clml: #2c323c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+  --accent: #8fb0ff; --accent-soft: #1f2b44; --point: #fb923c; --warn: #f5c26b; --warn-soft: #33291a;
+  --clayL: #3a2526; --clayI: #4a2b2d; --clayH: #5a3134; --siltL: #22352a; --siltH: #2a4433; --clml: #2c323c;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); padding-inline: 16px; padding-block: 16px 28px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 66ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 18px; align-items: start; }
+@media (max-width: 800px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.panel > * { min-width: 0; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; justify-self: start; }
+.seg button { font: 500 0.82rem var(--font-body); padding: 6px 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button + button { border-left: 1px solid var(--rule); }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 0.8rem; color: var(--muted); }
+.inp { min-width: 0; display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 1rem var(--font-data); padding: 8px 10px; font-variant-numeric: tabular-nums; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 10px; color: var(--muted); font-size: 0.85rem; }
+.checks { display: grid; gap: 6px; font-size: 0.85rem; }
+.checks label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.checks input { accent-color: var(--accent); margin-top: 3px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.presets button { font: 500 0.78rem var(--font-body); padding: 3px 9px; border: 1px solid var(--rule); border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.presets button:hover { border-color: var(--accent); color: var(--accent); }
+.result { border-top: 1px solid var(--rule); padding-top: 14px; display: grid; gap: 10px; }
+.res { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); }
+.res .sym { font: 500 clamp(1.7rem, 4.5vw, 2.2rem)/1.1 var(--font-data); color: var(--accent); }
+.res .name { font: 600 1.05rem var(--font-display); color: var(--ink); }
+.res .why { font-size: 0.82rem; color: var(--muted); }
+.warn { font-size: 0.82rem; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 8px 10px; margin: 0; }
+dl.terms { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; margin: 0; font-size: 0.88rem; }
+dl.terms dt { color: var(--muted); }
+dl.terms dd { margin: 0; text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.hint { font-size: 0.78rem; color: var(--muted); margin: 0; }
+.chart svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.chart .cap { font-size: 0.8rem; color: var(--muted); margin: 0; }
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .gl { stroke: var(--grid); stroke-width: 1; }
+svg .ax { stroke: var(--muted); stroke-width: 1; }
+svg .tick { font: 10.5px var(--font-data); }
+svg .axlab { font: 13px var(--font-body); fill: var(--ink); }
+svg .zlab { font: 600 12px var(--font-data); fill: var(--ink); opacity: 0.75; pointer-events: none; }
+svg .aline { stroke: var(--ink); stroke-width: 1.8; fill: none; }
+svg .uline { stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 7 5; fill: none; }
+svg .bline { stroke: var(--ink); stroke-width: 1.2; fill: none; }
+svg .llab { font: 11.5px var(--font-data); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+svg .guide { stroke: var(--point); stroke-width: 1; stroke-dasharray: 3 3; }
+svg .pt { fill: var(--point); stroke: var(--panel); stroke-width: 2.5; cursor: grab; }
+svg .ptlab { font: 600 12px var(--font-data); fill: var(--point); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+svg .sl { stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 3; fill: none; }
+svg .slpt { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+svg .sllab { font: 600 11.5px var(--font-data); fill: var(--accent); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 8px; font-size: 0.88rem; max-width: 80ch; }
+.dbody p, .dbody ul { margin: 0; }
+.dbody var { font-family: var(--font-display); font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Plasticity chart</h1>
+    <p class="lede">Enter the liquid and plastic limits, or drag the point on the chart, to see where a fine-grained soil plots and how it is classified. Switch between the USCS and AS&nbsp;1726 versions of the chart.</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="Inputs and classification">
+      <div class="seg" role="group" aria-label="Classification system">
+        <button data-sys="uscs" aria-pressed="true">USCS</button>
+        <button data-sys="as" aria-pressed="false">AS 1726</button>
+      </div>
+      <div class="fields">
+        <div class="field"><label for="ll">Liquid limit, <i>LL</i></label><div class="inp"><input id="ll" type="number" step="1" min="0" inputmode="decimal" value="70"><span class="unit">%</span></div></div>
+        <div class="field"><label for="pl">Plastic limit, <i>PL</i></label><div class="inp"><input id="pl" type="number" step="1" min="0" inputmode="decimal" value="20"><span class="unit">%</span></div></div>
+      </div>
+      <div class="presets"><span>Examples:</span>
+        <button data-ll="70" data-pl="20">Book example</button>
+        <button data-ll="45" data-pl="35">Silt</button>
+        <button data-ll="24" data-pl="18">Silty clay</button>
+        <button data-ll="150" data-pl="50">Montmorillonite</button>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="organic"><span>Organic soil (for example, <i>LL</i> drops markedly after oven drying)</span></label>
+        <label><input type="checkbox" id="showSL" checked><span>Show the shrinkage-limit estimate</span></label>
+      </div>
+
+      <div class="result" aria-live="polite">
+        <div class="res"><span class="sym" id="sym">CH</span><span class="name" id="name">Fat clay</span><span class="why" id="why"></span></div>
+        <p class="warn" id="warn" hidden></p>
+        <dl class="terms">
+          <dt>Plasticity index, <i>PI</i> = <i>LL</i> − <i>PL</i></dt><dd id="pi">50.0</dd>
+          <dt>A-line at this <i>LL</i>: 0.73(<i>LL</i> − 20)</dt><dd id="pia">36.5</dd>
+          <dt>U-line at this <i>LL</i>: 0.9(<i>LL</i> − 8)</dt><dd id="piu">55.8</dd>
+          <dt id="sldt">Estimated shrinkage limit, <i>SL</i></dt><dd id="sl">—</dd>
+        </dl>
+        <p class="hint">The chart classifies the fine fraction only. A full classification also needs the percentage of fines from the particle-size distribution.</p>
+      </div>
+    </section>
+
+    <section class="panel chart" aria-label="Plasticity chart">
+      <svg id="svg" viewBox="0 0 640 470" role="img" aria-label="Plasticity chart with the A-line, U-line and soil zones, and the point for the entered limits"></svg>
+      <p class="cap" id="cap">Click or drag on the chart to move the point. Clays plot above the A-line and silts below it. Natural soils very rarely plot above the U-line.</p>
+    </section>
+  </div>
+
+  <details>
+    <summary>How the chart works</summary>
+    <div class="dbody">
+      <p>The plasticity index <var>PI</var> = <var>LL</var> − <var>PL</var> is plotted against the liquid limit <var>LL</var>. Casagrande's <em>A-line</em>, <var>PI</var> = 0.73(<var>LL</var> − 20), separates clays (above) from silts (below). The <em>U-line</em>, <var>PI</var> = 0.9(<var>LL</var> − 8), is an approximate upper bound for natural soils; a point above it usually means the test results should be checked.</p>
+      <p>Vertical lines on the liquid limit divide each group by plasticity:</p>
+      <ul>
+        <li><b>USCS:</b> low plasticity (L) for <var>LL</var> &lt; 50 and high plasticity (H) for <var>LL</var> ≥ 50. Group names: lean clay (CL), fat clay (CH), silt (ML), elastic silt (MH).</li>
+        <li><b>AS 1726:</b> clays are low (CL) for <var>LL</var> ≤ 35, medium (CI) for 35 &lt; <var>LL</var> ≤ 50 and high (CH) for <var>LL</var> &gt; 50; silts are low (ML) for <var>LL</var> ≤ 50 and high (MH) above.</li>
+      </ul>
+      <p>Soils plotting above the A-line with 4 ≤ <var>PI</var> ≤ 7 fall in the hatched CL-ML zone (silty clay). Soils with <var>PI</var> &lt; 4 are classed as silts. Organic soils use the same zones with the symbol O.</p>
+      <p>The shrinkage limit is estimated by drawing a line from the point to the intersection of the A-line and U-line at (<var>LL</var>, <var>PI</var>) = (−43.5, −46.4). The line crosses <var>PI</var> = 0 at the estimated shrinkage limit.</p>
+    </div>
+  </details>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const svg = $("svg"), NS = "http://www.w3.org/2000/svg";
+let W = 640, H = 470; const M = { l: 54, r: 18, t: 16, b: 46 };
+// draw at one SVG unit per CSS pixel so text stays readable on phones
+function sizeChart() { const w = Math.max(300, Math.round(svg.parentNode.clientWidth - 32)); if (Math.abs(w - W) < 2) return false; W = w; H = Math.round(Math.max(300, Math.min(w * 0.74, 520))); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); return true; }
+new ResizeObserver(() => { if (sizeChart()) draw(); }).observe(svg.parentNode);
+const A = ll => 0.73 * (ll - 20), U = ll => 0.9 * (ll - 8);
+let sys = "uscs", LL = 70, PL = 20, dragging = false;
+let xmax = 100, ymax = 70;
+
+const X = v => M.l + v / xmax * (W - M.l - M.r);
+const Y = v => H - M.b - v / ymax * (H - M.t - M.b);
+const ix = px => (px - M.l) / (W - M.l - M.r) * xmax;
+const iy = py => (H - M.b - py) / (H - M.t - M.b) * ymax;
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; }
+const r1 = v => (Math.round(v * 10) / 10).toFixed(1);
+function niceMax(v, steps) { for (const s of steps) if (v <= s) return s; return Math.ceil(v / 100) * 100; }
+
+// zone polygon between LL = a..b with lower and upper bounding functions, clipped to the chart
+function band(a, b, lo, hi) {
+  b = Math.min(b, xmax); if (b <= a) return null;
+  const n = 120, top = [], bot = [];
+  for (let i = 0; i <= n; i++) {
+    const x = a + (b - a) * i / n;
+    const l = Math.max(0, Math.min(ymax, lo(x))), h = Math.max(0, Math.min(ymax, hi(x)));
+    if (h > l + 1e-9) { top.push([x, h]); bot.push([x, l]); }
+  }
+  if (top.length < 2) return null;
+  return top.concat(bot.reverse()).map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join(" ");
+}
+const clayLo = x => Math.max(A(x), 7), clayHi = x => U(x);
+const siltHi = x => Math.min(U(x), Math.max(A(x), 4));
+const cmLo = x => Math.max(A(x), 4), cmHi = x => Math.min(U(x), 7);
+
+function zones() {
+  if (sys === "uscs") return [
+    { s: "ML", f: "--siltL", a: 0, b: 50, lo: () => 0, hi: siltHi },
+    { s: "MH", f: "--siltH", a: 50, b: 1e4, lo: () => 0, hi: siltHi },
+    { s: "CL", f: "--clayI", a: 0, b: 50, lo: clayLo, hi: clayHi },
+    { s: "CH", f: "--clayH", a: 50, b: 1e4, lo: clayLo, hi: clayHi },
+    { s: "CL-ML", f: "--clml", a: 0, b: 50, lo: cmLo, hi: cmHi },
+  ];
+  return [
+    { s: "ML", f: "--siltL", a: 0, b: 50, lo: () => 0, hi: siltHi },
+    { s: "MH", f: "--siltH", a: 50, b: 1e4, lo: () => 0, hi: siltHi },
+    { s: "CL", f: "--clayL", a: 0, b: 35, lo: clayLo, hi: clayHi },
+    { s: "CI", f: "--clayI", a: 35, b: 50, lo: clayLo, hi: clayHi },
+    { s: "CH", f: "--clayH", a: 50, b: 1e4, lo: clayLo, hi: clayHi },
+    { s: "CL-ML", f: "--clml", a: 0, b: 50, lo: cmLo, hi: cmHi },
+  ];
+}
+
+function classify(ll, pi, org) {
+  if (!(ll > 0) || pi <= 0) return { sym: "NP", name: "Non-plastic", why: pi < 0 ? "The plastic limit exceeds the liquid limit, so the soil is treated as non-plastic." : "PI = 0: the soil is non-plastic." };
+  const pa = A(ll), above = pi >= pa;
+  let clay, cm = false;
+  if (above && pi >= 4 && pi <= 7) cm = true;
+  clay = above && pi > 7;
+  const pos = above ? `on or above the A-line (PI ≥ ${r1(pa)})` : `below the A-line (PI < ${r1(pa)})`;
+  if (cm) return { sym: org ? "OL" : "CL-ML", name: org ? (sys === "uscs" ? "Organic clay or silt" : "Organic soil of low plasticity") : (sys === "uscs" ? "Silty clay" : "Silty clay of low plasticity"), why: `Plots ${pos} with 4 ≤ PI ≤ 7.` };
+  let lvl;
+  if (sys === "uscs") lvl = ll < 50 ? "L" : "H";
+  else lvl = clay ? (ll <= 35 ? "L" : ll <= 50 ? "I" : "H") : (ll <= 50 ? "L" : "H");
+  const pw = { L: "low", I: "medium", H: "high" }[lvl];
+  const llTxt = sys === "uscs" ? (lvl === "L" ? "LL < 50" : "LL ≥ 50") : ({ L: clay ? "LL ≤ 35" : "LL ≤ 50", I: "35 < LL ≤ 50", H: "LL > 50" }[lvl]);
+  const why = `Plots ${pos}${!clay && above && pi < 4 ? " but with PI < 4" : ""}, and ${llTxt}.`;
+  if (org) return { sym: "O" + lvl, name: sys === "uscs" ? (clay ? "Organic clay" : "Organic silt") : `Organic soil of ${pw} plasticity`, why };
+  const sym = (clay ? "C" : "M") + lvl;
+  const name = sys === "uscs" ? { CL: "Lean clay", CH: "Fat clay", ML: "Silt", MH: "Elastic silt" }[sym] : `${clay ? "Clay" : "Silt"} of ${pw} plasticity`;
+  return { sym, name, why };
+}
+function slEstimate(ll, pi) { if (pi <= 0) return NaN; return -43.5 + 46.4 * (ll + 43.5) / (pi + 46.4); }
+
+function draw() {
+  const PI = LL - PL;
+  if (!dragging) {   // axes stay fixed while the point is being dragged
+    xmax = niceMax(Math.max(100, LL * 1.08), [100, 120, 150, 200, 300, 400, 600, 900]);
+    ymax = niceMax(Math.max(70, PI * 1.12), [70, 80, 100, 150, 200, 300, 400, 600]);
+  }
+  svg.textContent = "";
+  const css = getComputedStyle(document.documentElement);
+  // zones
+  const defs = el("defs", {});
+  const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+  el("rect", { width: 6, height: 6, fill: css.getPropertyValue("--clml") }, pat);
+  el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: css.getPropertyValue("--muted"), "stroke-width": 1.2, opacity: 0.6 }, pat);
+  const zs = zones();
+  for (const z of zs) { const p = band(z.a, z.b, z.lo, z.hi); if (p) el("polygon", { points: p, fill: z.s === "CL-ML" ? "url(#hatch)" : css.getPropertyValue(z.f) }); }
+  // grid
+  const sx = xmax <= 120 ? 10 : xmax <= 300 ? 25 : 100, sy = ymax <= 80 ? 10 : ymax <= 200 ? 25 : 100;
+  for (let v = 0; v <= xmax + 1e-9; v += sx) { el("line", { class: "gl", x1: X(v), y1: Y(0), x2: X(v), y2: Y(ymax) }); el("text", { class: "tick", x: X(v), y: H - M.b + 16, "text-anchor": "middle" }).textContent = v; }
+  for (let v = 0; v <= ymax + 1e-9; v += sy) { el("line", { class: "gl", x1: X(0), y1: Y(v), x2: X(xmax), y2: Y(v) }); el("text", { class: "tick", x: M.l - 7, y: Y(v) + 3.5, "text-anchor": "end" }).textContent = v; }
+  el("line", { class: "ax", x1: X(0), y1: Y(0), x2: X(xmax), y2: Y(0) });
+  el("line", { class: "ax", x1: X(0), y1: Y(0), x2: X(0), y2: Y(ymax) });
+  el("text", { class: "axlab", x: (X(0) + X(xmax)) / 2, y: H - 8, "text-anchor": "middle" }).textContent = "Liquid limit, LL (%)";
+  el("text", { class: "axlab", x: 14, y: (Y(0) + Y(ymax)) / 2, "text-anchor": "middle", transform: `rotate(-90 14 ${(Y(0) + Y(ymax)) / 2})` }).textContent = "Plasticity index, PI (%)";
+  // boundary lines
+  const clipX = (f, x0) => { const x1 = Math.min(xmax, (ymax / (f === A ? 0.73 : 0.9)) + (f === A ? 20 : 8)); return [x0, x1]; };
+  const [a0, a1] = clipX(A, 25.48); el("line", { class: "aline", x1: X(a0), y1: Y(A(a0)), x2: X(a1), y2: Y(A(a1)) });
+  const [u0, u1] = clipX(U, 8); el("line", { class: "uline", x1: X(u0), y1: Y(0), x2: X(u1), y2: Y(U(u1)) });
+  el("line", { class: "bline", x1: X(12.44), y1: Y(4), x2: X(25.48), y2: Y(4) });
+  el("line", { class: "bline", x1: X(15.78), y1: Y(7), x2: X(29.59), y2: Y(7) });
+  const vline = v => el("line", { class: "bline", x1: X(v), y1: Y(0), x2: X(v), y2: Y(Math.min(U(v), ymax)) });
+  vline(50); if (sys === "as") vline(35);
+  // line labels, placed along the lines near the right
+  const ang = (f, s) => -Math.atan(s * (W - M.l - M.r) / xmax / ((H - M.t - M.b) / ymax)) * 180 / Math.PI;
+  const lab = (txt, x, f, s, dy) => { const t = el("text", { class: "llab", x: X(x), y: Y(f(x)) + dy, "text-anchor": "middle", transform: `rotate(${ang(f, s)} ${X(x)} ${Y(f(x)) + dy})` }); t.textContent = txt; };
+  const xa = Math.min(a1 - 0.12 * (a1 - a0), xmax * 0.86), xu = Math.min(u1 - 0.18 * (u1 - u0), xmax * 0.6);
+  lab("A-line", xa, A, 0.73, 14);
+  lab("U-line", xu, U, 0.9, -6);
+  // zone symbols
+  const zl = (txt, x, y) => { if (x < xmax && y < ymax) el("text", { class: "zlab", x: X(x), y: Y(y), "text-anchor": "middle" }).textContent = txt; };
+  const sc = xmax / 100;
+  if (sys === "uscs") { zl("CL", 40, 20); zl("CH", 50 + 25 * sc, Math.min(ymax * 0.62, A(50 + 25 * sc) + 14 * sc)); zl("ML", 38, 6); zl("MH", 50 + 25 * sc, A(50 + 25 * sc) * 0.45); }
+  else { zl("CL", 30, 13.5); zl("CI", 43, 22); zl("CH", 50 + 25 * sc, Math.min(ymax * 0.62, A(50 + 25 * sc) + 14 * sc)); zl("ML", 38, 6); zl("MH", 50 + 25 * sc, A(50 + 25 * sc) * 0.45); }
+  // shrinkage-limit construction
+  const sl = slEstimate(LL, PI);
+  if ($("showSL").checked && isFinite(sl) && PI > 0) {
+    // line from the point back towards (-43.5, -46.4), clipped at PI = 0 and LL = 0
+    el("line", { class: "sl", x1: X(LL), y1: Y(PI), x2: X(sl), y2: Y(0) });
+    el("circle", { class: "slpt", cx: X(Math.max(0, sl)), cy: Y(0), r: 4.5 });
+    el("text", { class: "sllab", x: X(Math.max(0, sl)) + 6, y: Y(0) - 7 }).textContent = `SL ≈ ${r1(sl)}`;
+  }
+  // point and guides
+  if (PI >= 0 && LL >= 0 && LL <= xmax && PI <= ymax) {
+    el("line", { class: "guide", x1: X(LL), y1: Y(0), x2: X(LL), y2: Y(PI) });
+    el("line", { class: "guide", x1: X(0), y1: Y(PI), x2: X(LL), y2: Y(PI) });
+    el("circle", { class: "pt", cx: X(LL), cy: Y(PI), r: 7 });
+    const right = X(LL) < W - 110;
+    el("text", { class: "ptlab", x: X(LL) + (right ? 11 : -11), y: Y(PI) - 9, "text-anchor": right ? "start" : "end" }).textContent = `(${r1(LL)}, ${r1(PI)})`;
+  }
+}
+
+function update(fromInputs) {
+  if (!fromInputs) { $("ll").value = r1(LL).replace(/\.0$/, ""); $("pl").value = r1(PL).replace(/\.0$/, ""); }
+  const PI = LL - PL, org = $("organic").checked;
+  const c = classify(LL, PI, org);
+  $("sym").textContent = c.sym; $("name").textContent = c.name; $("why").textContent = c.why;
+  $("pi").textContent = r1(PI); $("pia").textContent = r1(A(LL)); $("piu").textContent = r1(U(LL));
+  const sl = slEstimate(LL, PI);
+  $("sl").textContent = isFinite(sl) && PI > 0 ? (sl < 0 ? "below 0 (outside the method)" : r1(sl)) : "—";
+  const w = $("warn");
+  if (PI > 0 && PI > U(LL) + 1e-9) { w.hidden = false; w.textContent = "This point plots above the U-line, the approximate upper bound for natural soils. Check the test results."; }
+  else w.hidden = true;
+  draw();
+}
+
+// inputs
+for (const id of ["ll", "pl"]) $(id).addEventListener("input", () => {
+  const a = parseFloat($("ll").value), b = parseFloat($("pl").value);
+  if (isFinite(a) && a >= 0) LL = a; if (isFinite(b) && b >= 0) PL = b; update(true);
+});
+$("organic").onchange = () => update(true);
+$("showSL").onchange = () => update(true);
+document.querySelectorAll("[data-sys]").forEach(b => b.onclick = () => { sys = b.dataset.sys; document.querySelectorAll("[data-sys]").forEach(x => x.setAttribute("aria-pressed", x === b)); update(true); });
+document.querySelectorAll("[data-ll]").forEach(b => b.onclick = () => { LL = +b.dataset.ll; PL = +b.dataset.pl; update(false); });
+
+// click and drag on the chart
+function fromPointer(e) {
+  const r = svg.getBoundingClientRect();
+  const px = (e.clientX - r.left) * W / r.width, py = (e.clientY - r.top) * H / r.height;
+  const ll = Math.max(0, Math.min(xmax, ix(px))), pi = Math.max(0, Math.min(ymax, iy(py)));
+  const step = xmax > 150 ? 1 : 0.5;
+  LL = Math.round(ll / step) * step; PL = Math.max(0, LL - Math.round(pi / step) * step);
+  update(false);
+}
+svg.addEventListener("pointerdown", e => { dragging = true; svg.setPointerCapture(e.pointerId); fromPointer(e); });
+svg.addEventListener("pointermove", e => { if (dragging) fromPointer(e); });
+svg.addEventListener("pointerup", () => dragging = false);
+svg.addEventListener("pointercancel", () => dragging = false);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw());
+sizeChart();
+update(true);
+</script>
+</body>
+</html>
