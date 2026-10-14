@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Particle Size Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: data/answer table on the left, the semi-log curve on the right; curve parameters and feedback below. */
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2330; --muted: #5b6676; --rule: #d9dee6; --grid: #e9ecf1;
+  --accent: #1f4fbf; --accent-soft: #e6ecfa; --ref: #8a5a00;
+  --ok: #1d7a46; --ok-soft: #e3f4ea; --bad: #b42318; --bad-soft: #fbe9e7; --hint: #8a5a00; --hint-soft: #fdf3e1;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+    --accent: #8fb0ff; --accent-soft: #1f2b44; --ref: #f5c26b;
+    --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1f1f; --hint: #f5c26b; --hint-soft: #33291a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+  --accent: #8fb0ff; --accent-soft: #1f2b44; --ref: #f5c26b;
+  --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1f1f; --hint: #f5c26b; --hint-soft: #33291a;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+:root { --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #e87ba4; --s5: #008300; --s6: #6250d6; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #d55181; --s5: #2f9e2f; --s6: #9085e9; } }
+:root[data-theme="dark"] { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #d55181; --s5: #2f9e2f; --s6: #9085e9; }
+.main.single { grid-template-columns: minmax(0, 1fr); }
+label.btn { display: inline-block; }
+table.par { border-collapse: collapse; font: 0.82rem var(--font-data); font-variant-numeric: tabular-nums; }
+table.par th, table.par td { padding: 3px 10px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+table.par th { color: var(--muted); font: 500 0.75rem var(--font-body); }
+table.par td:first-child, table.par th:first-child { text-align: left; }
+.swatch { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); padding-inline: 16px; padding-block: 16px 28px; }
+.wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font: 600 1rem var(--font-body); margin: 0; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.panel > * { min-width: 0; }
+.sticky { position: sticky; top: 12px; }
+@media (max-width: 860px) { .sticky { position: static; } }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, .btn { font: 500 0.85rem var(--font-body); border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 6px 10px; }
+select { background: var(--bg); }
+.btn { cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn.primary:hover { color: var(--panel); filter: brightness(1.08); }
+.note { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.note i, label i { font-family: var(--font-display); }
+.scroll { overflow-x: auto; max-width: 100%; }
+table.data { border-collapse: collapse; font: 0.85rem var(--font-data); font-variant-numeric: tabular-nums; width: 100%; }
+table.data th, table.data td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+table.data th { color: var(--muted); font: 500 0.75rem var(--font-body); vertical-align: bottom; }
+table.data td.given { color: var(--ink); }
+table.data input { width: 4.6em; font: 500 0.88rem var(--font-data); text-align: right; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 5px; padding: 4px 6px; }
+table.data input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+table.data input.ok { border-color: var(--ok); background: var(--ok-soft); }
+table.data input.bad { border-color: var(--bad); background: var(--bad-soft); }
+@media (max-width: 480px) {
+  table.data input { width: 3.7em; padding: 4px; }
+  table.data th { font-size: 0.68rem; }
+  table.data th, table.data td { padding: 3px 2px; }
+}
+table.data tr.sub td { color: var(--muted); font: 600 0.75rem var(--font-body); text-align: left; padding-top: 10px; }
+.totrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 0.85rem; }
+.inp { display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); min-width: 0; }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { width: 6em; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 0.92rem var(--font-data); padding: 6px 8px; text-align: right; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 8px; color: var(--muted); font-size: 0.8rem; }
+.inp.ok { border-color: var(--ok); background: var(--ok-soft); } .inp.bad { border-color: var(--bad); background: var(--bad-soft); } .inp.warn { border-color: var(--hint); background: var(--hint-soft); }
+.params { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
+.field { display: grid; gap: 3px; }
+.field > label { font-size: 0.8rem; color: var(--muted); }
+.field > .inp { display: flex; width: 100%; box-sizing: border-box; }
+.field > .inp input { flex: 1; width: auto; }
+.nd { font-size: 0.75rem; color: var(--muted); display: flex; gap: 5px; align-items: center; }
+.nd input { accent-color: var(--accent); }
+.fb { display: grid; gap: 8px; }
+.msg { border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; border-left: 4px solid; }
+.msg.ok { background: var(--ok-soft); border-color: var(--ok); }
+.msg.bad { background: var(--bad-soft); border-color: var(--bad); }
+.msg.hint { background: var(--hint-soft); border-color: var(--hint); }
+.msg p { margin: 0; } .msg p + p { margin-top: 4px; }
+.msg ul { margin: 4px 0 0; padding-left: 1.2em; }
+.chart svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .gmaj { stroke: var(--rule); stroke-width: 1; }
+svg .gmin { stroke: var(--grid); stroke-width: 1; }
+svg .ax { stroke: var(--muted); stroke-width: 1; }
+svg .tick { font: 10.5px var(--font-data); }
+svg .axlab { font: 12.5px var(--font-body); fill: var(--ink); }
+svg .curve { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+svg .pt { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+svg .ref { fill: none; stroke: var(--ref); stroke-width: 2; stroke-dasharray: 6 4; }
+svg .guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+svg .dmark { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 4 3; }
+svg .dlab { font: 600 11px var(--font-data); fill: var(--accent); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+svg .cross { stroke: var(--ink); stroke-width: 0.8; opacity: 0.6; }
+svg .crosslab { font: 11px var(--font-data); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+svg .legend { font: 11.5px var(--font-body); fill: var(--ink); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; }
+.checks label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+textarea { width: 100%; box-sizing: border-box; min-height: 150px; font: 0.85rem/1.4 var(--font-data); color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 8px; font-size: 0.88rem; max-width: 80ch; }
+.dbody p { margin: 0; }
+.sol table { border-collapse: collapse; font: 0.82rem var(--font-data); margin-top: 4px; }
+.sol td, .sol th { padding: 2px 8px; text-align: right; border-bottom: 1px solid var(--rule); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Particle-size distribution checker</h1>
+    <p class="lede">Work through a sieve analysis yourself: fill in the mass passing and percent finer for each sieve, plot the curve, and read the parameters from it. Then check your work. Mistakes come back as questions pointing at the first thing to revisit; hints and the full solution are there when you need them.</p>
+  </header>
+
+  <section class="panel">
+    <div class="row">
+      <select id="pick" aria-label="Problem"></select>
+      <button class="btn" id="newRandom" hidden>New random data</button>
+    </div>
+    <p class="note" id="task"></p>
+    <div id="ownBox" hidden>
+      <p class="note">Enter one sieve per line as “size in mm, mass retained in g”, from the largest sieve down, and finish with “pan, mass”. Optionally add hydrometer readings as “h, size in µm, mass finer in g”.</p>
+      <textarea id="own" spellcheck="false">19, 0
+9.5, 25.2
+4.75, 41.8
+2.36, 38.5
+1.18, 30.1
+0.6, 44.0
+0.3, 52.3
+0.15, 35.6
+0.075, 18.9
+pan, 13.6</textarea>
+      <div class="row"><button class="btn" id="useOwn">Use this data</button><span class="note" id="ownMsg"></span></div>
+    </div>
+    <div id="plotBox" hidden>
+      <p class="note">Paste or type the data: the first column is the particle size in mm, followed by one column of percent finer for each soil (up to six). A header row with the soil names is optional. Columns can be separated by commas, tabs (as when pasting from a spreadsheet), semicolons or spaces. Leave a cell empty if a soil was not tested on that sieve.</p>
+      <textarea id="plotData" spellcheck="false">Size (mm), Well graded, Uniform, Gap graded
+19, 100, 100, 100
+9.5, 88, 100, 82
+4.75, 68, 100, 66
+2.36, 48, 99, 63
+1.18, 32, 96, 61
+0.6, 22, 70, 58
+0.3, 14, 18, 40
+0.15, 8, 4, 15
+0.075, 3, 1, 6</textarea>
+      <div class="row">
+        <button class="btn primary" id="plotBtn">Plot</button>
+        <label class="btn" for="csv">Load a CSV file</label><input type="file" id="csv" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+        <span class="note" id="plotMsg"></span>
+      </div>
+    </div>
+  </section>
+
+  <div class="main">
+    <section class="panel" id="tablePanel" aria-label="Sieve analysis table">
+      <h2>1. Complete the table</h2>
+      <div class="totrow">
+        <span>Total mass of the sample:</span>
+        <span class="inp" id="w-total"><input id="total" type="number" step="0.1" inputmode="decimal" aria-label="Total mass of the sample"><span class="unit">g</span></span>
+      </div>
+      <div class="scroll"><table class="data" id="tbl"></table></div>
+      <p class="note">Enter percentages to one decimal place. The plot updates as you type.</p>
+    </section>
+
+    <section class="panel chart sticky" aria-label="Particle-size distribution curve">
+      <h2 id="chartTitle">2. Your particle-size distribution curve</h2>
+      <svg id="svg" viewBox="0 0 560 400" role="img" aria-label="Semi-logarithmic plot of percent finer against particle size"></svg>
+      <div class="checks">
+        <label><input type="checkbox" id="showGuides" checked> 10, 30 and 60% lines</label>
+        <label id="showDwrap"><input type="checkbox" id="showD" checked> My <i>D</i> values</label>
+        <label><input type="checkbox" id="flip"> Size increasing to the right</label>
+      </div>
+      <p class="note">Move the pointer over the chart to read the size and percent finer at any point, as you would on graph paper.</p>
+      <div id="plotParams" hidden></div>
+      <div class="row"><button class="btn" id="dlSvg">Download SVG</button><button class="btn" id="dlPng">Download PNG</button></div>
+    </section>
+  </div>
+
+  <section class="panel" id="paramsPanel" aria-label="Parameters from the curve">
+    <h2>3. Read the curve</h2>
+    <div class="params" id="params"></div>
+    <div class="row">
+      <button class="btn primary" id="check">Check my work</button>
+      <button class="btn" id="hint" disabled>Give me a hint</button>
+      <button class="btn" id="solve" disabled>Show the solution</button>
+    </div>
+    <div class="fb" id="fb" aria-live="polite"></div>
+  </section>
+
+  <details>
+    <summary>How the checker works</summary>
+    <div class="dbody">
+      <p>Each row of the table is checked against your own previous row, so one slip does not turn the whole column red: the mass passing a sieve should equal the mass passing the sieve above minus the mass retained on it, and the percent finer should equal that mass divided by the total mass of the sample.</p>
+      <p>The reference curve joins the data points with straight lines on the semi-log plot, so sizes are interpolated on a logarithmic scale: <i>D</i> = <i>D</i><sub>1</sub>(<i>D</i><sub>2</sub>/<i>D</i><sub>1</sub>)<sup>(<i>P</i> − <i>P</i><sub>1</sub>)/(<i>P</i><sub>2</sub> − <i>P</i><sub>1</sub>)</sup>. A smooth curve drawn by hand gives slightly different values, so sizes read from the curve are accepted within ±12%, and percentages within ±2.5%. <i>C<sub>u</sub></i> and <i>C<sub>c</sub></i> are checked against your own <i>D</i> values.</p>
+      <p>If less than 10% of the soil is finer than the smallest size tested, <i>D</i><sub>10</sub> cannot be read from the data. Tick “not determinable” in that case, and think about what you could do instead.</p>
+    </div>
+  </details>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const r1 = v => (Math.round(v * 10) / 10).toFixed(1);
+const fmtD = v => v >= 1 ? v.toFixed(2) : v >= 0.1 ? v.toFixed(3) : v.toFixed(4);
+
+// ---------------------------------------------------------------- problems
+const EX11 = { key: "ex11", label: "Example 1.1 (sieve and hydrometer)",
+  task: "Example 1.1: sieve analysis followed by a hydrometer analysis of the soil collected in the pan. Then find D₁₀, D₃₀, D₆₀, Cu and Cc (Example 1.2) and the percentage of sand, 0.06 to 2 mm (Example 1.3).",
+  sieves: [[37.5, 22], [19, 14], [9.5, 32], [4.75, 28], [1.18, 12], [0.6, 30], [0.425, 14], [0.15, 19], [0.075, 9]], pan: 20,
+  hydro: [[50, 12], [25, 9], [10, 7], [5, 6], [1, 2], [0.5, 1]], range: [0.06, 2] };
+const P11 = { key: "p11", label: "Chapter 1, Problem 1",
+  task: "Chapter 1, Problem 1: plot the particle-size distribution curve, find D₁₀, Cu and Cc, and the percentage between 0.6 and 4.75 mm.",
+  sieves: [[13.2, 3.8], [9.5, 11.1], [6.7, 15.7], [4.75, 14.4], [2.36, 17.2], [1.18, 24.6], [0.6, 28.7], [0.425, 10.3], [0.3, 22.5], [0.15, 43.8], [0.075, 38.7]], pan: 46.2,
+  hydro: [], range: [0.6, 4.75] };
+
+// random data: a smooth (log-normal) or gap-graded grading on standard AS sieves
+const SIEVES = [75, 53, 37.5, 26.5, 19, 13.2, 9.5, 6.7, 4.75, 2.36, 1.18, 0.6, 0.425, 0.3, 0.15, 0.075];
+function erf(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
+const Phi = z => 0.5 * (1 + erf(z / Math.SQRT2));
+function randomProblem() {
+  for (let k = 0; k < 500; k++) {
+    const comps = Math.random() < 0.3 ? 2 : 1, parts = [];
+    for (let c = 0; c < comps; c++) parts.push({ m: Math.log10(0.15 * 10 ** (Math.random() * 2.2)), s: 0.25 + Math.random() * 0.75, w: 1 });
+    if (comps === 2) { parts[0].w = 0.4 + Math.random() * 0.3; parts[1].w = 1 - parts[0].w; if (Math.abs(parts[0].m - parts[1].m) < 0.9) continue; }
+    const P = d => 100 * parts.reduce((a, p) => a + p.w * Phi((Math.log10(d) - p.m) / p.s), 0);
+    let top = SIEVES.findIndex(d => P(d) < 99.5); if (top < 0) continue; top = Math.max(0, top - 1);
+    const used = SIEVES.slice(top).filter((d, i, a) => i === 0 || i === a.length - 1 || Math.random() < 0.8 || d === 4.75 || d === 2.36);
+    if (used.length < 7) continue;
+    const total = Math.round(250 + Math.random() * 650);
+    let prev = 100; const sieves = []; let massPass = total;
+    for (const d of used) { const p = Math.min(prev, P(d)); const ret = Math.round((prev - p) / 100 * total * 10) / 10; sieves.push([d, ret]); massPass -= ret; prev = p; }
+    const pan = Math.round(massPass * 10) / 10;
+    if (pan <= 0.5) continue;
+    const fines = pan / total * 100;
+    if (fines > 25 || sieves.every(s => s[1] === 0)) continue;
+    // range question between two of the sieves used
+    const i = 1 + Math.floor(Math.random() * (used.length - 4)), j = i + 2 + Math.floor(Math.random() * (used.length - i - 2));
+    return { key: "random", label: "Random data", task: `Random sieve analysis (total ${total} g). Find D₁₀, D₃₀, D₆₀, Cu and Cc, and the percentage between ${used[j]} and ${used[i]} mm.`, sieves, pan, hydro: [], range: [used[j], used[i]] };
+  }
+  return P11;
+}
+
+// ---------------------------------------------------------------- reference solution
+function solve(pb) {
+  const total = pb.sieves.reduce((a, s) => a + s[1], 0) + pb.pan;
+  let pass = total; const rows = [];
+  for (const [d, m] of pb.sieves) { pass -= m; rows.push({ d, ret: m, pass: Math.round(pass * 1000) / 1000, pct: pass / total * 100 }); }
+  const hrows = pb.hydro.map(([um, m]) => ({ d: um / 1000, um, m, pct: m / total * 100 }));
+  const pts = rows.map(r => [r.d, r.pct]).concat(hrows.map(h => [h.d, h.pct]));
+  return { total, rows, hrows, pts };
+}
+function interpD(pts, p) {          // size at p% finer, log-linear between points (sizes descending)
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [d1, p1] = pts[i], [d2, p2] = pts[i + 1];
+    if (p1 >= p && p >= p2) { if (p1 === p2) return d1; const t = (p1 - p) / (p1 - p2); return 10 ** (Math.log10(d1) + t * (Math.log10(d2) - Math.log10(d1))); }
+  }
+  return null;
+}
+function interpP(pts, d) {          // percent finer at size d
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [d1, p1] = pts[i], [d2, p2] = pts[i + 1];
+    if (d1 >= d && d >= d2) { const t = (Math.log10(d1) - Math.log10(d)) / (Math.log10(d1) - Math.log10(d2)); return p1 + t * (p2 - p1); }
+  }
+  return null;
+}
+function bracket(pts, p) { for (let i = 0; i < pts.length - 1; i++) if (pts[i][1] >= p && p >= pts[i + 1][1]) return [pts[i], pts[i + 1]]; return null; }
+
+// ---------------------------------------------------------------- state and table
+let pb = EX11, ref = null, hintLevel = 0, last = null, showSol = false, tries = 0;
+let mode = "check", series = [];   // plot-only mode: [{name, pts: [[size, %], ...]}]
+const PARAMS = [["D10", "D<sub>10</sub>", "mm", true], ["D30", "D<sub>30</sub>", "mm", true], ["D60", "D<sub>60</sub>", "mm", true], ["Cu", "C<sub>u</sub>", "", true], ["Cc", "C<sub>c</sub>", "", true], ["range", "", "%", false]];
+
+function buildPicker() {
+  const sel = $("pick");
+  for (const [v, t] of [["ex11", EX11.label], ["p11", P11.label], ["random", "Random data"], ["own", "Enter my own data"], ["plot", "Plot curves only (paste or CSV)"]]) { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); }
+  sel.onchange = () => load(sel.value);
+}
+function setMode(m) {
+  mode = m; const plot = m === "plot";
+  $("plotBox").hidden = !plot; $("tablePanel").hidden = plot; $("paramsPanel").hidden = plot;
+  $("plotParams").hidden = !plot; $("showDwrap").hidden = plot;
+  document.querySelector(".main").classList.toggle("single", plot);
+  document.querySelector(".chart").classList.toggle("sticky", !plot);
+  $("chartTitle").textContent = plot ? "Particle-size distribution curves" : "2. Your particle-size distribution curve";
+  if (plot) $("task").textContent = "Plot one or more particle-size distribution curves from sieve sizes and percent finer.";
+}
+function load(v) {
+  $("ownBox").hidden = v !== "own"; $("newRandom").hidden = v !== "random";
+  if (v === "plot") { setMode("plot"); plotFromText(); return; }
+  setMode("check");
+  if (v === "ex11") pb = EX11; else if (v === "p11") pb = P11; else if (v === "random") pb = randomProblem();
+  else { const r = parseOwn(); if (!r.ok) { $("ownMsg").textContent = r.msg; return; } pb = r.pb; }
+  setup();
+}
+function parseOwn() {
+  const lines = $("own").value.split(/\n/).map(l => l.trim()).filter(Boolean), sieves = [], hydro = []; let pan = null;
+  for (const l of lines) {
+    const p = l.split(/[,\s]+/);
+    if (/^pan$/i.test(p[0])) { pan = parseFloat(p[1]); continue; }
+    if (/^h$/i.test(p[0])) { hydro.push([parseFloat(p[1]), parseFloat(p[2])]); continue; }
+    sieves.push([parseFloat(p[0]), parseFloat(p[1])]);
+  }
+  if (sieves.length < 3 || sieves.some(s => !(s[0] > 0) || !(s[1] >= 0)) || !(pan >= 0)) return { ok: false, msg: "Check the format: at least three sieves, each “size, mass”, and a “pan, mass” line." };
+  if (sieves.some((s, i) => i && s[0] >= sieves[i - 1][0])) return { ok: false, msg: "List the sieves from the largest to the smallest." };
+  return { ok: true, pb: { key: "own", label: "Your data", task: "Your data. Find D₁₀, D₃₀, D₆₀, Cu and Cc.", sieves, pan, hydro, range: null } };
+}
+function parsePlot(text) {
+  const lines = text.replace(/\r/g, "").split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+  if (!lines.length) return { ok: false, msg: "No data found." };
+  const delim = lines.some(l => l.includes("\t")) ? "\t" : lines.some(l => l.includes(",")) ? "," : lines.some(l => l.includes(";")) ? ";" : /\s+/;
+  const split = l => l.split(delim).map(c => c.trim().replace(/^"(.*)"$/, "$1"));
+  let names = null, scale = 1, rows = lines.map(split);
+  if (!isFinite(parseFloat(rows[0][0]))) { names = rows[0].slice(1); if (/µm|um|micron/i.test(rows[0][0])) scale = 0.001; rows = rows.slice(1); }
+  const nCols = Math.max(...rows.map(r => r.length));
+  if (nCols < 2) return { ok: false, msg: "Each row needs a size and at least one percent finer." };
+  const out = [];
+  for (let c = 1; c < Math.min(nCols, 7); c++) {
+    const pts = [];
+    for (const r of rows) { const d = parseFloat(r[0]) * scale, p = parseFloat(r[c]); if (d > 0 && isFinite(p)) pts.push([d, p]); }
+    if (pts.length >= 2) out.push({ name: (names && names[c - 1]) || (nCols > 2 ? `Soil ${c}` : "Soil"), pts: pts.sort((a, b) => b[0] - a[0]) });
+  }
+  if (!out.length) return { ok: false, msg: "Could not read any curves. Check that the sizes and percentages are numbers." };
+  const bad = out.find(sr => sr.pts.some(([, p]) => p < 0 || p > 100));
+  const warn = (nCols > 7 ? "Only the first six soils are plotted. " : "") + (bad ? `Some values in “${bad.name}” are outside 0–100%. ` : "") +
+    (out.some(sr => sr.pts.some((q, i) => i && q[1] > sr.pts[i - 1][1] + 1e-9)) ? "Percent finer should not increase as the size decreases; check the data." : "");
+  return { ok: true, series: out, warn };
+}
+function plotFromText() {
+  const r = parsePlot($("plotData").value);
+  $("plotMsg").textContent = r.ok ? (r.warn || `${r.series.length} curve${r.series.length > 1 ? "s" : ""} plotted.`) : r.msg;
+  if (!r.ok) return;
+  series = r.series; renderPlotParams(); draw();
+}
+function renderPlotParams() {
+  let h = `<details><summary>Curve parameters (<i>D</i><sub>10</sub>, <i>D</i><sub>30</sub>, <i>D</i><sub>60</sub>, <i>C<sub>u</sub></i>, <i>C<sub>c</sub></i>)</summary><div class="dbody"><div class="scroll"><table class="par"><tr><th>Soil</th><th>D10 (mm)</th><th>D30 (mm)</th><th>D60 (mm)</th><th>Cu</th><th>Cc</th></tr>`;
+  series.forEach((sr, i) => {
+    const d = [10, 30, 60].map(p => interpD(sr.pts, p)), f = v => v == null ? "–" : fmtD(v);
+    const cu = d[0] && d[2] ? (d[2] / d[0]).toFixed(1) : "–", cc = d[0] && d[1] && d[2] ? (d[1] * d[1] / (d[2] * d[0])).toFixed(2) : "–";
+    h += `<tr><td><span class="swatch" style="background:var(--s${i + 1})"></span>${sr.name}</td><td>${f(d[0])}</td><td>${f(d[1])}</td><td>${f(d[2])}</td><td>${cu}</td><td>${cc}</td></tr>`;
+  });
+  $("plotParams").innerHTML = h + `</table></div><p class="note">Interpolated on the logarithmic scale between data points. A dash means the curve does not reach that percentage within the data.</p></div></details>`;
+}
+function setup() {
+  ref = solve(pb); hintLevel = 0; last = null; showSol = false; tries = 0;
+  $("task").textContent = pb.task;
+  $("total").value = ""; $("w-total").className = "inp";
+  const t = $("tbl"); let h = `<thead><tr><th>Sieve size<br>(mm)</th><th>Mass retained<br>(g)</th><th>Mass passing<br>(g)</th><th>Percent<br>finer (%)</th></tr></thead><tbody>`;
+  pb.sieves.forEach(([d, m], i) => { h += `<tr><td class="given">${d}</td><td class="given">${m}</td><td><input id="mp${i}" inputmode="decimal" aria-label="Mass passing ${d} mm"></td><td><input id="pf${i}" inputmode="decimal" aria-label="Percent finer than ${d} mm"></td></tr>`; });
+  h += `<tr><td class="given">Pan</td><td class="given">${pb.pan}</td><td>–</td><td>–</td></tr>`;
+  if (pb.hydro.length) {
+    h += `<tr class="sub"><td colspan="4">Hydrometer analysis (soil from the pan)</td></tr><tr><th>Size (µm)</th><th>Mass finer (g)</th><th></th><th>Percent finer (%)</th></tr>`;
+    pb.hydro.forEach(([um, m], i) => { h += `<tr><td class="given">${um}</td><td class="given">${m}</td><td></td><td><input id="hf${i}" inputmode="decimal" aria-label="Percent finer than ${um} micrometres"></td></tr>`; });
+  }
+  t.innerHTML = h + "</tbody>";
+  t.querySelectorAll("input").forEach(e => e.addEventListener("input", () => { e.className = ""; draw(); }));
+  const pp = $("params"); pp.innerHTML = "";
+  for (const [k, lab, unit] of PARAMS) {
+    if (k === "range" && !pb.range) continue;
+    const label = k === "range" ? `Percent between ${pb.range[0]} and ${pb.range[1]} mm` : `<i>${lab.replace(/<sub>/, "</i><sub>").replace(/^(?!<\/i>)/, "")}</i>`;
+    const f = document.createElement("div"); f.className = "field";
+    f.innerHTML = `<label for="v-${k}">${k === "range" ? label : lab.replace(/^([A-Z])/, "<i>$1</i>")}</label><span class="inp" id="w-${k}"><input id="v-${k}" inputmode="decimal">${unit ? `<span class="unit">${unit}</span>` : ""}</span>` +
+      (["D10", "Cu", "Cc"].includes(k) ? `<label class="nd"><input type="checkbox" id="nd-${k}"> not determinable</label>` : "");
+    pp.appendChild(f);
+  }
+  pp.querySelectorAll("input").forEach(e => e.addEventListener("input", () => { draw(); }));
+  $("fb").textContent = ""; $("hint").disabled = true; $("solve").disabled = true;
+  draw();
+}
+const num = id => { const e = $(id); if (!e) return null; const v = parseFloat(e.value); return isFinite(v) ? v : null; };
+
+// ---------------------------------------------------------------- chart
+const svg = $("svg"), NS = "http://www.w3.org/2000/svg";
+let W = 560, H = 400; const M = { l: 48, r: 16, t: 14, b: 44 };
+function el(tag, a, p) { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); (p || svg).appendChild(e); return e; }
+let lo = 0.001, hi = 100;
+const lx = d => { const f = (Math.log10(d) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)); return $("flip").checked ? M.l + f * (W - M.l - M.r) : W - M.r - f * (W - M.l - M.r); };
+const yy = p => H - M.b - p / 100 * (H - M.t - M.b);
+const ix = x => { let f = (x - M.l) / (W - M.l - M.r); if (!$("flip").checked) f = 1 - f; return 10 ** (Math.log10(lo) + f * (Math.log10(hi) - Math.log10(lo))); };
+const iy = y => (H - M.b - y) / (H - M.t - M.b) * 100;
+function sizeChart() { const w = Math.max(300, Math.round(svg.parentNode.clientWidth - 32)); if (Math.abs(w - W) < 2) return false; W = w; H = Math.round(Math.max(280, Math.min(w * 0.72, 460))); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); return true; }
+new ResizeObserver(() => { if (sizeChart()) draw(); }).observe(svg.parentNode);
+
+function studentPts() {
+  const pts = [];
+  pb.sieves.forEach(([d], i) => { const v = num("pf" + i); if (v != null) pts.push([d, v]); });
+  pb.hydro.forEach(([um], i) => { const v = num("hf" + i); if (v != null) pts.push([um / 1000, v]); });
+  return pts;
+}
+let hover = null;
+function draw() {
+  svg.textContent = "";
+  if (mode === "plot" && !series.length) return;
+  const sizes = mode === "plot" ? series.flatMap(sr => sr.pts.map(p => p[0])) : ref.pts.map(p => p[0]);
+  lo = 10 ** Math.floor(Math.log10(Math.min(...sizes)) - 1e-9); hi = 10 ** Math.ceil(Math.log10(Math.max(...sizes)) + 1e-9);
+  if (Math.log10(hi / lo) < 2) lo = hi / 100;
+  // grid: decades and 2..9 subdivisions
+  for (let e = Math.log10(lo); e < Math.log10(hi) + 1e-9; e++) {
+    const base = 10 ** e;
+    el("line", { class: "gmaj", x1: lx(base), y1: yy(0), x2: lx(base), y2: yy(100) });
+    const decW = (W - M.l - M.r) / Math.log10(hi / lo), skip = decW < 48 && Math.round(e - Math.log10(lo)) % 2 === 1;
+    if (!skip) el("text", { class: "tick", x: lx(base), y: H - M.b + 15, "text-anchor": "middle" }).textContent = base >= 1 ? base : +base.toPrecision(1);
+    if (base * 10 <= hi * 1.0001) for (let k = 2; k <= 9; k++) el("line", { class: "gmin", x1: lx(base * k), y1: yy(0), x2: lx(base * k), y2: yy(100) });
+  }
+  for (let p = 0; p <= 100; p += 10) { el("line", { class: p % 50 ? "gmin" : "gmaj", x1: lx(lo), y1: yy(p), x2: lx(hi), y2: yy(p) }); el("text", { class: "tick", x: M.l - 6, y: yy(p) + 3.5, "text-anchor": "end" }).textContent = p; }
+  el("line", { class: "ax", x1: M.l, y1: yy(0), x2: W - M.r, y2: yy(0) });
+  el("line", { class: "ax", x1: M.l, y1: yy(0), x2: M.l, y2: yy(100) });
+  el("text", { class: "axlab", x: (M.l + W - M.r) / 2, y: H - 8, "text-anchor": "middle" }).textContent = "Particle size (mm), logarithmic scale";
+  const cy = (yy(0) + yy(100)) / 2; el("text", { class: "axlab", x: 13, y: cy, "text-anchor": "middle", transform: `rotate(-90 13 ${cy})` }).textContent = "Percent finer (%)";
+  if ($("showGuides").checked) for (const p of [10, 30, 60]) el("line", { class: "guide", x1: lx(lo), y1: yy(p), x2: lx(hi), y2: yy(p) });
+  if (mode === "plot") { drawSeries(); drawCross(); return; }
+  // reference curve after the solution is shown
+  if (showSol) el("polyline", { class: "ref", points: ref.pts.map(([d, p]) => `${lx(d).toFixed(1)},${yy(p).toFixed(1)}`).join(" ") });
+  // student's curve
+  const sp = studentPts().filter(([d, p]) => d >= lo && d <= hi && p >= -5 && p <= 105);
+  if (sp.length > 1) el("polyline", { class: "curve", points: sp.map(([d, p]) => `${lx(d).toFixed(1)},${yy(p).toFixed(1)}`).join(" ") });
+  for (const [d, p] of sp) el("circle", { class: "pt", cx: lx(d), cy: yy(p), r: 4 });
+  // student's D readings
+  if ($("showD").checked) for (const [k, p] of [["D10", 10], ["D30", 30], ["D60", 60]]) {
+    const v = num("v-" + k); if (v == null || v < lo || v > hi || ($("nd-" + k) && $("nd-" + k).checked)) continue;
+    el("line", { class: "dmark", x1: lx(v), y1: yy(0), x2: lx(v), y2: yy(p) });
+    el("text", { class: "dlab", x: lx(v) + 4, y: yy(p) - 5 }).textContent = k.replace("D", "D");
+  }
+  // legend
+  let ly = $("flip").checked ? M.t + 12 : yy(0) - (showSol ? 26 : 10); const lxp = M.l + 10;
+  el("line", { class: "curve", x1: lxp, y1: ly - 4, x2: lxp + 22, y2: ly - 4 }); el("text", { class: "legend", x: lxp + 28, y: ly }).textContent = "Your curve";
+  if (showSol) { ly += 16; el("line", { class: "ref", x1: lxp, y1: ly - 4, x2: lxp + 22, y2: ly - 4 }); el("text", { class: "legend", x: lxp + 28, y: ly }).textContent = "Reference curve"; }
+  drawCross();
+}
+function marker(i, x, y, col) {
+  const st = `fill:${col};stroke:var(--panel);stroke-width:1.5`, r = 4.2;
+  if (i % 4 === 0) return el("circle", { cx: x, cy: y, r, style: st });
+  if (i % 4 === 1) return el("rect", { x: x - r, y: y - r, width: 2 * r, height: 2 * r, style: st });
+  if (i % 4 === 2) return el("path", { d: `M${x},${y - r - 1}L${x + r + 1},${y + r}L${x - r - 1},${y + r}Z`, style: st });
+  return el("path", { d: `M${x},${y - r - 1}L${x + r + 1},${y}L${x},${y + r + 1}L${x - r - 1},${y}Z`, style: st });
+}
+function drawSeries() {
+  series.forEach((sr, i) => {
+    const col = `var(--s${i + 1})`, pts = sr.pts.filter(([d]) => d >= lo && d <= hi);
+    el("polyline", { points: pts.map(([d, p]) => `${lx(d).toFixed(1)},${yy(p).toFixed(1)}`).join(" "), style: `fill:none;stroke:${col};stroke-width:2;stroke-linejoin:round` });
+    for (const [d, p] of pts) marker(i, lx(d), yy(p), col);
+  });
+  // legend in the corner the curves usually leave empty
+  const lxp = M.l + 12; let ly = $("flip").checked ? M.t + 14 : yy(0) - 10 - 16 * (series.length - 1);
+  series.forEach((sr, i) => {
+    const col = `var(--s${i + 1})`;
+    el("line", { x1: lxp, y1: ly - 4, x2: lxp + 24, y2: ly - 4, style: `stroke:${col};stroke-width:2` });
+    marker(i, lxp + 12, ly - 4, col);
+    el("text", { class: "legend", x: lxp + 32, y: ly }).textContent = sr.name;
+    ly += 16;
+  });
+}
+function drawCross() {
+  if (hover) {
+    const [x, y] = hover;
+    if (x >= M.l && x <= W - M.r && y >= M.t && y <= H - M.b) {
+      el("line", { class: "cross", x1: x, y1: M.t, x2: x, y2: H - M.b }); el("line", { class: "cross", x1: M.l, y1: y, x2: W - M.r, y2: y });
+      const right = x < W - 150;
+      el("text", { class: "crosslab", x: x + (right ? 8 : -8), y: y - 8, "text-anchor": right ? "start" : "end" }).textContent = `${fmtD(ix(x))} mm, ${r1(iy(y))}%`;
+    }
+  }
+}
+svg.addEventListener("pointermove", e => { const r = svg.getBoundingClientRect(); hover = [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; draw(); });
+svg.addEventListener("pointerleave", () => { hover = null; draw(); });
+["showGuides", "showD", "flip"].forEach(id => $(id).onchange = draw);
+
+// ---------------------------------------------------------------- checking
+function check() {
+  tries++; hintLevel = 0; const issues = [];
+  const total = num("total"), T = ref.total;
+  // total
+  const totOk = total != null && Math.abs(total - T) <= 0.15;
+  $("w-total").className = "inp " + (total == null ? "" : totOk ? "ok" : "bad");
+  if (total == null) issues.push({ where: "total", q: "Start with the total mass of the sample: add up the masses retained on all the sieves and in the pan.", h: "" });
+  else if (!totOk) issues.push({ where: "total", q: "Check the total mass of the sample. Did you include the mass in the pan?", h: `The masses retained add up to ${r1(T)} g.` });
+  const useT = total != null ? total : T;
+  // sieve rows: each checked against the student's previous row
+  let prevPass = useT, firstRow = null, missing = 0;
+  pb.sieves.forEach(([d, m], i) => {
+    const mp = num("mp" + i), pf = num("pf" + i), eMp = $("mp" + i), ePf = $("pf" + i);
+    if (mp == null) { eMp.className = ""; missing++; }
+    else {
+      const ok = Math.abs(mp - (prevPass - m)) <= 0.15 || Math.abs(mp - ref.rows[i].pass) <= 0.15;   // follows from their previous row, or is right
+      eMp.className = ok ? "ok" : "bad";
+      if (!ok && !firstRow) firstRow = { q: `Row ${d} mm: the mass passing this sieve is the mass passing the sieve above it minus the mass retained on this sieve.`, h: `${r1(prevPass)} − ${m} = ${r1(prevPass - m)} g.` };
+    }
+    const basis = mp != null ? mp : prevPass - m;
+    if (pf == null) { ePf.className = ""; missing++; }
+    else {
+      const ok = Math.abs(pf - basis / useT * 100) <= 0.15 && Math.abs(pf - ref.rows[i].pct) <= 1;
+      ePf.className = ok ? "ok" : "bad";
+      if (!ok && !firstRow) firstRow = { q: `Row ${d} mm: the percent finer is the mass passing this sieve divided by the total mass of the sample, times 100.`, h: `${r1(basis)} / ${r1(useT)} × 100 = ${r1(basis / useT * 100)}%.` };
+    }
+    prevPass = mp != null ? mp : prevPass - m;
+  });
+  if (Math.abs(prevPass - pb.pan) > 0.15 && !firstRow && missing === 0) firstRow = { q: "The mass passing the last sieve should equal the mass in the pan. Check your subtractions.", h: "" };
+  pb.hydro.forEach(([um, m], i) => {
+    const v = num("hf" + i), e = $("hf" + i);
+    if (v == null) { e.className = ""; missing++; return; }
+    const ok = Math.abs(v - m / T * 100) <= 0.15; e.className = ok ? "ok" : "bad";
+    if (!ok && !firstRow) firstRow = Math.abs(v - m / pb.pan * 100) <= 0.3
+      ? { q: `Hydrometer, ${um} µm: you divided by the mass of soil from the pan. The percent finer must be a percentage of the whole sample.`, h: `${m} / ${r1(T)} × 100 = ${r1(m / T * 100)}%.` }
+      : { q: `Hydrometer, ${um} µm: the percent finer is the mass finer than this size divided by the total mass of the sample, times 100.`, h: `${m} / ${r1(T)} × 100 = ${r1(m / T * 100)}%.` };
+  });
+  if (firstRow) issues.push(firstRow);
+  else if (missing) issues.push({ where: "table", q: `The table has ${missing} empty cell${missing > 1 ? "s" : ""}. Complete it before reading the curve.`, h: "" });
+
+  // parameters
+  const pts = ref.pts, minP = pts[pts.length - 1][1];
+  const D = {}; for (const [k, p] of [["D10", 10], ["D30", 30], ["D60", 60]]) D[k] = interpD(pts, p);
+  const mark = (k, cls) => { const w = $("w-" + k); if (w) w.className = "inp " + cls; };
+  const pIss = [];
+  for (const [k, p] of [["D10", 10], ["D30", 30], ["D60", 60]]) {
+    const v = num("v-" + k), nd = $("nd-" + k) && $("nd-" + k).checked, want = D[k];
+    if (want == null) {
+      if (nd) { mark(k, "ok"); pIss.push({ ok: true, q: `${k}: right, it cannot be read from these data. Only ${r1(minP)}% of the soil is finer than the smallest size tested. What could you do about it? (Think about a hydrometer test, or what extrapolating the curve would assume.)` }); }
+      else if (v != null) { mark(k, "warn"); pIss.push({ warn: true, q: `${k} = ${v} mm is below the smallest size tested, where ${r1(minP)}% of the soil is still finer. The data cannot confirm this value: it is an extrapolation of the curve. Is that acceptable here? If not, tick “not determinable”.` }); }
+      else { mark(k, ""); pIss.push({ q: `Find ${k}: draw the ${p}% line across to your curve. Does the curve reach ${p}%?`, h: `The smallest size tested still has ${r1(minP)}% finer.` }); }
+      continue;
+    }
+    if (nd) { mark(k, "bad"); pIss.push({ q: `${k} can be read from this curve: the curve does cross ${p}%. Draw the ${p}% line across to it and read the size.`, h: "" }); continue; }
+    if (v == null) { mark(k, ""); pIss.push({ q: `Read ${k} from your curve: draw the ${p}% line across to the curve and read the particle size below that point.`, h: "" }); continue; }
+    const ok = Math.abs(Math.log(v / want)) <= Math.log(1.12);
+    mark(k, ok ? "ok" : "bad");
+    if (!ok) { const b = bracket(pts, p); pIss.push({ q: `Check ${k}: it is the size at which ${p}% of the soil is finer. Read it where your curve crosses the ${p}% line, using the logarithmic scale.`, h: b ? `The ${p}% line crosses the curve between ${b[0][0]} mm (${r1(b[0][1])}%) and ${b[1][0]} mm (${r1(b[1][1])}%).` : "" }); }
+  }
+  // Cu, Cc: consistency with the student's own D values
+  const s10 = num("v-D10"), s30 = num("v-D30"), s60 = num("v-D60");
+  for (const k of ["Cu", "Cc"]) {
+    const v = num("v-" + k), nd = $("nd-" + k).checked;
+    if (D.D10 == null) {
+      if (nd) { mark(k, "ok"); }
+      else if (v != null) { mark(k, "warn"); pIss.push({ warn: true, q: `${k} depends on D₁₀, which these data cannot confirm. If you used an extrapolated D₁₀, say so when you report ${k}.` }); }
+      else mark(k, "");
+      continue;
+    }
+    if (nd) { mark(k, "bad"); pIss.push({ q: `${k} can be calculated here, because D₁₀ can be read from the curve.`, h: "" }); continue; }
+    if (v == null) { mark(k, ""); continue; }
+    const want = k === "Cu" ? (s60 && s10 ? s60 / s10 : null) : (s30 && s60 && s10 ? s30 * s30 / (s60 * s10) : null);
+    const refV = k === "Cu" ? D.D60 / D.D10 : D.D30 * D.D30 / (D.D60 * D.D10);
+    const consistent = want != null && Math.abs(v - want) <= Math.max(0.03 * want, 0.015);
+    const near = Math.abs(Math.log(v / refV)) <= Math.log(k === "Cu" ? 1.3 : 1.4);
+    mark(k, consistent && near ? "ok" : "bad");
+    if (!consistent) pIss.push({ q: k === "Cu" ? "Check Cu: it is D₆₀ divided by D₁₀. Use your own D values." : "Check Cc: it is D₃₀² divided by (D₆₀ × D₁₀). Did you square D₃₀?", h: want != null ? `With your D values, ${k} = ${want.toFixed(2)}.` : "Enter your D values first." });
+    else if (!near) pIss.push({ q: `${k} follows correctly from your D values, but those D values are off. Fix them first.`, h: "" });
+  }
+  if (pb.range) {
+    const [a, b] = pb.range, v = num("v-range"), pa = interpP(pts, a), pbb = interpP(pts, b);
+    if (v == null) mark("range", "");
+    else if (pa != null && pbb != null) {
+      const want = pbb - pa, ok = Math.abs(v - want) <= 2.5; mark("range", ok ? "ok" : "bad");
+      if (!ok) pIss.push({ q: `Check the percentage between ${a} and ${b} mm: read the percent finer at each size from your curve and subtract the smaller from the larger.`, h: `About ${r1(pbb)}% is finer than ${b} mm.` });
+    }
+  }
+  last = { issues, pIss };
+  $("solve").disabled = false;
+  render();
+}
+
+function render() {
+  const fb = $("fb"), out = [];
+  if (last) {
+    const { issues, pIss } = last;
+    const bad = issues.concat(pIss.filter(x => !x.ok && !x.warn));
+    if (!bad.length) out.push(`<div class="msg ok"><p><b>All correct.</b>${pIss.some(x => x.warn) ? " See the note below." : ""}</p></div>`);
+    if (issues.length) out.push(`<div class="msg bad"><p><b>Table:</b> ${issues[0].q}</p></div>`);
+    for (const x of pIss) out.push(`<div class="msg ${x.ok ? "ok" : x.warn ? "hint" : "bad"}"><p>${x.q}</p></div>`);
+    const first = bad[0];
+    $("hint").disabled = !(first && first.h) || hintLevel > 0;
+    if (hintLevel && first && first.h) out.push(`<div class="msg hint"><p><b>Hint:</b> ${first.h}</p></div>`);
+  }
+  if (showSol) out.push(solutionHTML());
+  fb.innerHTML = out.join("");
+}
+
+function solutionHTML() {
+  const pts = ref.pts, D = {}; for (const [k, p] of [["D10", 10], ["D30", 30], ["D60", 60]]) D[k] = interpD(pts, p);
+  let h = `<div class="msg hint sol"><p><b>Solution</b></p><p>Total mass = ${r1(ref.total)} g.</p><div class="scroll"><table><tr><th>Size (mm)</th><th>Retained (g)</th><th>Passing (g)</th><th>Finer (%)</th></tr>`;
+  ref.rows.forEach(r => { h += `<tr><td>${r.d}</td><td>${r.ret}</td><td>${r1(r.pass)}</td><td>${r1(r.pct)}</td></tr>`; });
+  ref.hrows.forEach(r => { h += `<tr><td>${r.d}</td><td>(${r.m} finer)</td><td></td><td>${r1(r.pct)}</td></tr>`; });
+  h += `</table></div><ul>`;
+  for (const [k, p] of [["D10", 10], ["D30", 30], ["D60", 60]]) {
+    if (D[k] == null) { h += `<li>${k}: not determinable from these data (${r1(pts[pts.length - 1][1])}% is still finer than the smallest size tested).</li>`; continue; }
+    const b = bracket(pts, p);
+    h += `<li>${k}: between ${b[0][0]} mm (${r1(b[0][1])}%) and ${b[1][0]} mm (${r1(b[1][1])}%), ${k} ≈ ${fmtD(D[k])} mm.</li>`;
+  }
+  if (D.D10 != null) h += `<li>Cu = D₆₀/D₁₀ ≈ ${(D.D60 / D.D10).toFixed(1)}; Cc = D₃₀²/(D₆₀ × D₁₀) ≈ ${(D.D30 * D.D30 / (D.D60 * D.D10)).toFixed(2)}.</li>`;
+  else h += `<li>Cu and Cc need D₁₀, so they cannot be found from these data without a further test or an assumption.</li>`;
+  if (pb.range) { const [a, b] = pb.range, pa = interpP(pts, a), pbb = interpP(pts, b); h += `<li>Finer than ${b} mm ≈ ${r1(pbb)}% and finer than ${a} mm ≈ ${r1(pa)}%, so about ${r1(pbb - pa)}% lies between ${a} and ${b} mm.</li>`; }
+  h += `</ul><p class="note">Values are interpolated on the logarithmic scale between data points; readings from a smooth hand-drawn curve differ slightly. The reference curve is now shown dashed on the chart.</p></div>`;
+  return h;
+}
+
+$("check").onclick = check;
+$("plotBtn").onclick = plotFromText;
+$("csv").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { $("plotData").value = rd.result; plotFromText(); };
+  rd.readAsText(f); e.target.value = "";
+};
+// downloads: copy the computed styles onto a clone so the file looks the same outside the page
+const PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linejoin", "opacity", "font-family", "font-size", "font-weight", "font-style", "paint-order"];
+function exportSVG() {
+  hover = null; draw();
+  const clone = svg.cloneNode(true), src = svg.querySelectorAll("*"), dst = clone.querySelectorAll("*");
+  src.forEach((n, i) => { const cs = getComputedStyle(n); dst[i].setAttribute("style", PROPS.map(p => `${p}:${cs.getPropertyValue(p)}`).join(";")); dst[i].removeAttribute("class"); });
+  clone.setAttribute("xmlns", NS); clone.setAttribute("width", W); clone.setAttribute("height", H);
+  const bg = document.createElementNS(NS, "rect"); bg.setAttribute("width", W); bg.setAttribute("height", H);
+  bg.setAttribute("fill", getComputedStyle(document.querySelector(".chart")).backgroundColor); clone.insertBefore(bg, clone.firstChild);
+  return new XMLSerializer().serializeToString(clone);
+}
+function download(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+$("dlSvg").onclick = () => download(new Blob([exportSVG()], { type: "image/svg+xml" }), "particle-size-distribution.svg");
+$("dlPng").onclick = () => {
+  const img = new Image(), url = URL.createObjectURL(new Blob([exportSVG()], { type: "image/svg+xml" }));
+  img.onload = () => { const c = document.createElement("canvas"); c.width = W * 2; c.height = H * 2; const g = c.getContext("2d"); g.scale(2, 2); g.drawImage(img, 0, 0); URL.revokeObjectURL(url); c.toBlob(b => download(b, "particle-size-distribution.png")); };
+  img.src = url;
+};
+$("hint").onclick = () => { hintLevel = 1; render(); };
+$("solve").onclick = () => { showSol = true; render(); draw(); };
+$("newRandom").onclick = () => { pb = randomProblem(); setup(); };
+$("useOwn").onclick = () => { const r = parseOwn(); $("ownMsg").textContent = r.ok ? "" : r.msg; if (r.ok) { pb = r.pb; setup(); } };
+buildPicker(); sizeChart(); setup();
+window.__psd = { solve, interpD, interpP, randomProblem, EX11, P11 };
+</script>
+</body>
+</html>
