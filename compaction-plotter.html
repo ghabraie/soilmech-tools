@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compaction Curve Plotter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: soil data on the left, the compaction plot on the right; results table and notes below. */
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2330; --muted: #5b6676; --rule: #d9dee6; --grid: #e9ecf1;
+  --accent: #1f4fbf; --accent-soft: #e6ecfa; --ref: #6b7380;
+  --ok: #1d7a46; --ok-soft: #e3f4ea; --bad: #b42318; --bad-soft: #fbe9e7; --hint: #8a5a00; --hint-soft: #fdf3e1;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #e87ba4; --s5: #008300; --s6: #6250d6;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+    --accent: #8fb0ff; --accent-soft: #1f2b44; --ref: #a3acb9;
+    --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1f1f; --hint: #f5c26b; --hint-soft: #33291a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #d55181; --s5: #2f9e2f; --s6: #9085e9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+  --accent: #8fb0ff; --accent-soft: #1f2b44; --ref: #a3acb9;
+  --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1f1f; --hint: #f5c26b; --hint-soft: #33291a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #d55181; --s5: #2f9e2f; --s6: #9085e9;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); padding-inline: 16px; padding-block: 16px 28px; }
+.wrap { max-width: 1140px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font: 600 1rem var(--font-body); margin: 0; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 76ch; }
+.main { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.panel > * { min-width: 0; }
+.sticky { position: sticky; top: 12px; }
+@media (max-width: 900px) { .sticky { position: static; } }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, .btn { font: 500 0.85rem var(--font-body); border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 6px 10px; }
+select { background: var(--bg); max-width: 100%; }
+.btn { cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.btn.primary:hover { color: var(--panel); filter: brightness(1.08); }
+.btn.small { padding: 3px 8px; font-size: 0.8rem; }
+label.btn { display: inline-block; }
+.note { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.note i, label i, th i { font-family: var(--font-display); }
+.scroll { overflow-x: auto; max-width: 100%; }
+/* soil tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { display: inline-flex; align-items: center; gap: 6px; font: 500 0.85rem var(--font-body); border: 1px solid var(--rule); border-radius: 999px; background: var(--bg); color: var(--ink); padding: 4px 12px 4px 8px; cursor: pointer; }
+.tab[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--panel); }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+/* fields */
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; }
+.field { display: grid; gap: 3px; min-width: 0; }
+.field > label { font-size: 0.78rem; color: var(--muted); }
+.inp { display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); min-width: 0; }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 0.9rem var(--font-data); padding: 6px 8px; }
+.inp input.txt { font-family: var(--font-body); }
+.inp input:focus { outline: none; }
+.inp .est { border: 0; border-left: 1px solid var(--rule); border-radius: 0 6px 6px 0; align-self: stretch; }
+.inp .unit { padding-right: 8px; color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+.field select { width: 100%; }
+/* data table */
+table.data { border-collapse: collapse; font: 0.85rem var(--font-data); font-variant-numeric: tabular-nums; width: 100%; }
+table.data th, table.data td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+table.data th { color: var(--muted); font: 500 0.74rem var(--font-body); vertical-align: bottom; }
+table.data th:first-child, table.data td:first-child { text-align: center; }
+table.data input[type=text] { width: 5.2em; font: 500 0.86rem var(--font-data); text-align: right; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 5px; padding: 4px 6px; }
+table.data input[type=text]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+table.data input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+table.data tr.ex td { color: var(--muted); }
+table.data tr.ex input[type=text] { text-decoration: line-through; color: var(--muted); }
+table.data td.calc { color: var(--muted); }
+table.data td.flag { color: var(--bad); font-family: var(--font-body); font-size: 0.75rem; text-align: left; }
+table.data .del { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0 4px; }
+table.data .del:hover { color: var(--bad); }
+@media (max-width: 480px) { table.data input[type=text] { width: 4.2em; padding: 4px; } table.data th, table.data td { padding: 3px 2px; } }
+textarea { width: 100%; box-sizing: border-box; min-height: 120px; font: 0.85rem/1.4 var(--font-data); color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; }
+/* chart */
+.chart svg { width: 100%; height: auto; display: block; touch-action: manipulation; user-select: none; }
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .gmaj { stroke: var(--rule); stroke-width: 1; }
+svg .gmin { stroke: var(--grid); stroke-width: 1; }
+svg .ax { stroke: var(--muted); stroke-width: 1; }
+svg .tick { font: 10.5px var(--font-data); }
+svg .axlab { font: 12.5px var(--font-body); fill: var(--ink); }
+svg .zav { fill: none; stroke: var(--ref); stroke-width: 1.4; stroke-dasharray: 7 4; }
+svg .air { fill: none; stroke: var(--ref); stroke-width: 1; stroke-dasharray: 2 3; }
+svg .zlab { font: 10.5px var(--font-body); fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+svg .guide { stroke-width: 1; stroke-dasharray: 3 3; }
+svg .optlab { font: 600 11px var(--font-data); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+svg .cross { stroke: var(--ink); stroke-width: 0.8; opacity: 0.5; }
+svg .crosslab { font: 11px var(--font-data); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+svg .legend { font: 11.5px var(--font-body); fill: var(--ink); }
+svg .legbox { fill: var(--panel); stroke: var(--rule); opacity: 0.92; }
+svg .lopt { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 8 3 2 3; opacity: 0.7; }
+svg .hit { cursor: pointer; }
+svg .empty { font: 13px var(--font-body); fill: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; }
+.checks label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+/* results */
+table.res { border-collapse: collapse; font: 0.85rem var(--font-data); font-variant-numeric: tabular-nums; width: 100%; }
+table.res th, table.res td { padding: 5px 10px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+table.res th { color: var(--muted); font: 500 0.75rem var(--font-body); vertical-align: bottom; }
+table.res td:first-child, table.res th:first-child { text-align: left; font-family: var(--font-body); }
+table.res td.big { font-weight: 600; color: var(--ink); }
+.msgs { display: grid; gap: 6px; }
+.msg { border-radius: 8px; padding: 8px 12px; font-size: 0.86rem; border-left: 4px solid; }
+.msg.ok { background: var(--ok-soft); border-color: var(--ok); }
+.msg.bad { background: var(--bad-soft); border-color: var(--bad); }
+.msg.hint { background: var(--hint-soft); border-color: var(--hint); }
+.msg p { margin: 0; }
+.msg ul { margin: 2px 0 0; padding-left: 1.2em; }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 8px; font-size: 0.88rem; max-width: 82ch; }
+.dbody p { margin: 0; }
+code { font: 0.82rem var(--font-data); background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Compaction curve plotter</h1>
+    <p class="lede">Enter the moisture content and dry density (or dry unit weight, or the mass of wet soil in the mould) of each compacted specimen. The tool fits a smooth curve as AS 1289.5.1.1 describes, with its wet leg parallel to an air voids line, finds the maximum dry density and optimum moisture content at its peak, and draws the zero-air-void curve. Click a point on the plot to leave it out of the fit. Add more soils to compare their curves.</p>
+  </header>
+
+  <section class="panel">
+    <div class="row">
+      <label class="note" for="demo">Start from</label>
+      <select id="demo">
+        <option value="ex41">Example 4.1 (standard Proctor, this book)</option>
+        <option value="energy">Standard and modified effort (same soil)</option>
+        <option value="soils">Three soils: sand, silty clay, clay</option>
+        <option value="blank">Blank: enter my own data</option>
+      </select>
+      <button class="btn" id="loadDemo">Load</button>
+      <span class="note" id="demoNote"></span>
+    </div>
+  </section>
+
+  <div class="main">
+    <section class="panel" aria-label="Soil data">
+      <div class="row" style="justify-content:space-between">
+        <h2>Test results</h2>
+        <div class="row"><button class="btn small" id="addSoil">+ Add soil</button><button class="btn small" id="delSoil">Remove soil</button></div>
+      </div>
+      <div class="tabs" id="tabs" role="tablist" aria-label="Soils"></div>
+      <div class="fields">
+        <div class="field"><label for="sName">Soil name</label><span class="inp"><input id="sName" class="txt" type="text"></span></div>
+        <div class="field"><label for="sGs">Particle density, <i>ρ</i><sub>s</sub> (or <i>G<sub>s</sub></i>)</label><span class="inp"><input id="sGs" type="text" inputmode="decimal" placeholder="e.g. 2.70"><span class="unit">t/m³</span><button class="btn small est" id="estGs" type="button" title="Estimate from the wettest point, as in the note to AS 1289.5.1.1">Estimate</button></span></div>
+        <div class="field"><label for="sMode">Data entered as</label>
+          <select id="sMode">
+            <option value="rho">Dry density (t/m³)</option>
+            <option value="gam">Dry unit weight (kN/m³)</option>
+            <option value="mass">Wet soil mass in mould (g)</option>
+          </select></div>
+        <div class="field" id="fV"><label for="sV">Mould volume</label><span class="inp"><input id="sV" type="text" inputmode="decimal"><span class="unit">cm³</span></span></div>
+        <div class="field"><label for="sFit">Curve</label>
+          <select id="sFit">
+            <option value="auto">AS method (automatic)</option>
+            <option value="as">Best fit, wet leg parallel to air voids</option>
+            <option value="spline">Cubic spline through the points</option>
+            <option value="2">Polynomial best fit: parabola</option>
+            <option value="3">Polynomial best fit: cubic</option>
+            <option value="4">Polynomial best fit: quartic</option>
+          </select></div>
+      </div>
+      <p class="note" id="gsMsg" hidden></p>
+      <div class="scroll"><table class="data" id="tbl"></table></div>
+      <div class="row">
+        <button class="btn small" id="addRow">+ Add row</button>
+        <button class="btn small" id="pasteBtn">Paste data</button>
+        <label class="btn small" for="csv">Import CSV</label><input type="file" id="csv" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+        <button class="btn small" id="clearRows">Clear</button>
+      </div>
+      <div id="pasteBox" hidden>
+        <p class="note">One specimen per line: moisture content (%), then the dry density, dry unit weight or wet mass (as selected above). Columns can be separated by commas, tabs (as when pasting from a spreadsheet), semicolons or spaces.</p>
+        <textarea id="pasteText" spellcheck="false" placeholder="10.2, 1.660&#10;12.1, 1.749&#10;..."></textarea>
+        <div class="row"><button class="btn primary small" id="pasteReplace">Replace data</button><button class="btn small" id="pasteAppend">Add to data</button><button class="btn small" id="pasteCancel">Cancel</button><span class="note" id="pasteMsg"></span></div>
+      </div>
+      <p class="note" id="csvMsg">A CSV with three columns (soil, moisture content, value) loads several soils at once.</p>
+    </section>
+
+    <section class="panel chart sticky" aria-label="Compaction plot">
+      <div class="row" style="justify-content:space-between">
+        <h2>Compaction curves</h2>
+        <select id="yUnit" aria-label="Vertical axis">
+          <option value="rho">Dry density (t/m³)</option>
+          <option value="gam">Dry unit weight (kN/m³)</option>
+        </select>
+      </div>
+      <svg id="svg" viewBox="0 0 600 430" role="img" aria-label="Plot of dry density against moisture content with fitted compaction curves"></svg>
+      <div class="checks">
+        <label><input type="checkbox" id="showZav" checked> Zero air voids</label>
+        <label><input type="checkbox" id="showAir"> 5% and 10% air</label>
+        <label><input type="checkbox" id="showGuides" checked> Optimum values</label>
+        <label><input type="checkbox" id="showLopt"> Line through optimums</label>
+      </div>
+      <p class="note">Click (or tap) a point to exclude it from the curve; click it again to include it. Move the pointer over the plot to read values.</p>
+      <div class="row">
+        <button class="btn small" id="dlPng">Download PNG</button>
+        <button class="btn small" id="dlSvg">Download SVG</button>
+        <button class="btn small" id="dlRes">Results (CSV)</button>
+        <button class="btn small" id="dlData">Data and curves (CSV)</button>
+      </div>
+      <p class="note" id="dlMsg"></p>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Results">
+    <h2>Results</h2>
+    <div class="scroll"><table class="res" id="res"></table></div>
+    <div class="msgs" id="msgs" aria-live="polite"></div>
+  </section>
+
+  <details>
+    <summary>How the curve and the optimum are found</summary>
+    <div class="dbody">
+      <p>AS 1289.5.1.1 (standard compaction) and AS 1289.5.2.1 (modified) ask for the dry densities to be plotted against moisture content and a smooth curve of best fit to be drawn through the points, <i>with the wet leg of the curve tending parallel to the air voids line</i>. The maximum dry density (MDD) and optimum moisture content (OMC) are the coordinates of the peak. The standard also allows a curve-fitting program that plots through the points, such as a cubic spline, to locate the peak.</p>
+      <p><b>AS method (automatic)</b> uses the first approach whenever the particle density is known and at least four points are in use; otherwise it uses a cubic spline. The best-fit curve joins a dry leg (a straight line, or a gentle curve when there are six or more points) smoothly to a curve of constant air voids, <i>ρ</i><sub>d</sub> = <i>ρ</i><sub>s</sub>(1 − <i>A</i>)/(1 + <i>wρ</i><sub>s</sub>/<i>ρ</i><sub>w</sub>), so its wet leg is parallel to an air voids line by construction. The dry leg, the air voids content <i>A</i> of the wet leg and the roundness of the peak are found by least squares; the air voids line that the wet leg follows is drawn dotted. Because it is a best fit, the peak may sit slightly below the highest measured point. The <b>cubic spline</b> passes through every point, so it follows their scatter too. Polynomial fits are offered for comparison.</p>
+      <p>The curve is drawn only between the driest and wettest points used; it is never extrapolated. If the highest point of the curve is at one end, the optimum is not bracketed by the data and more specimens are needed on that side.</p>
+      <p>The particle density <i>ρ</i><sub>s</sub> (numerically equal to <i>G<sub>s</sub></i> in t/m³) is best measured (AS 1289.3.5.1). <b>Estimate</b> applies the rough check in the note to AS 1289.5.1.1: take the dry density of the wettest point, assume 2% air voids, and find the particle density that puts a point 1% wetter on that air voids line. With <i>ρ</i><sub>s</sub> given, the zero-air-void curve is <i>ρ</i><sub>d</sub> = <i>ρ</i><sub>s</sub>/(1 + <i>wρ</i><sub>s</sub>/<i>ρ</i><sub>w</sub>); a point above it is impossible and points to an error in the data or in <i>ρ</i><sub>s</sub>.</p>
+      <p>When the mass of wet soil in the mould is entered, the dry density is <i>ρ</i><sub>d</sub> = <i>M</i>/[<i>V</i>(1 + <i>w</i>)]. Dry unit weights are converted using <i>γ</i><sub>d</sub> = 9.81<i>ρ</i><sub>d</sub> (kN/m³, with <i>ρ</i><sub>d</sub> in t/m³).</p>
+      <p>The checks below the results are good practice for a reliable curve, not a substitute for the test standard; check the standard for the number of specimens, the moisture increments and how results are reported.</p>
+    </div>
+  </details>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const G = 9.81;
+const SHAPES = 4;
+
+// ---------------------------------------------------------------- data
+const DEMOS = {
+  ex41: { note: "Dry unit weights from the solution of Example 4.1.", soils: [
+    { name: "Example 4.1", gs: 2.68, mode: "gam", V: 943.3, fit: "auto",
+      rows: [[9.4, 16.38], [10.1, 16.75], [11.4, 17.22], [13.0, 17.54], [15.1, 17.50], [17.1, 17.02], [18.9, 16.41], [20.5, 15.84]] }] },
+  energy: { note: "One point on the standard curve looks suspect: try excluding it.", soils: [
+    { name: "Standard effort", gs: 2.70, mode: "rho", V: 1000, fit: "auto",
+      rows: [[10.2, 1.660], [12.1, 1.749], [13.1, 1.742], [14.2, 1.822], [16.0, 1.798], [18.1, 1.729]] },
+    { name: "Modified effort", gs: 2.70, mode: "rho", V: 1000, fit: "auto",
+      rows: [[7.8, 1.792], [9.7, 1.905], [11.4, 1.962], [13.2, 1.935], [15.1, 1.872]] }] },
+  soils: { note: "Typical shapes: sharply peaked for the sand, flat for the clay.", soils: [
+    { name: "Well-graded sand", gs: 2.65, mode: "rho", V: 1000, fit: "auto",
+      rows: [[4.1, 1.939], [5.6, 2.011], [7.0, 2.063], [8.5, 2.030], [10.1, 1.968]] },
+    { name: "Silty clay", gs: 2.70, mode: "rho", V: 1000, fit: "auto",
+      rows: [[9.0, 1.670], [11.1, 1.737], [13.0, 1.803], [15.2, 1.821], [17.1, 1.750], [19.0, 1.686]] },
+    { name: "Clay", gs: 2.72, mode: "rho", V: 1000, fit: "auto",
+      rows: [[16.2, 1.427], [19.0, 1.491], [21.8, 1.552], [24.6, 1.558], [27.5, 1.491]] }] },
+  blank: { note: "", soils: [{ name: "Soil 1", gs: 2.70, mode: "rho", V: 1000, fit: "auto", rows: [] }] }
+};
+let soils = [], active = 0, nextColour = 0;
+function makeSoil(o) {
+  return { name: o.name, gs: o.gs ?? null, mode: o.mode || "rho", V: o.V ?? 1000, fit: o.fit || "auto", col: (nextColour++) % 6,
+    rows: (o.rows || []).map(r => ({ w: String(r[0]), v: String(r[1]), ex: !!r[2] })) };
+}
+function loadDemo(k) {
+  nextColour = 0; soils = DEMOS[k].soils.map(makeSoil); active = 0;
+  $("demoNote").textContent = DEMOS[k].note;
+  if (k === "blank") for (let i = 0; i < 5; i++) soils[0].rows.push({ w: "", v: "", ex: false });
+  renderSoil(); update();
+}
+const num = s => { if (s == null) return null; const v = parseFloat(String(s).replace(",", ".")); return isFinite(v) ? v : null; };
+function rhoOf(s, r) {                // dry density in t/m3, or null
+  const w = num(r.w), v = num(r.v); if (w == null || v == null || v <= 0) return null;
+  if (s.mode === "rho") return v;
+  if (s.mode === "gam") return v / G;
+  const V = num(s.V); return V > 0 ? v / V / (1 + w / 100) : null;
+}
+function points(s) {                  // all valid points: {i, w, rho, ex}
+  const out = [];
+  s.rows.forEach((r, i) => { const w = num(r.w), rho = rhoOf(s, r); if (w != null && rho != null && w >= 0) out.push({ i, w, rho, ex: r.ex }); });
+  return out;
+}
+
+// ---------------------------------------------------------------- fitting
+function solveLin(A, b) {
+  const n = b.length; A = A.map(r => r.slice()); b = b.slice();
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    if (Math.abs(A[c][c]) < 1e-12) return null;
+    for (let r = c + 1; r < n; r++) { const f = A[r][c] / A[c][c]; for (let k = c; k < n; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+  }
+  const x = Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = b[r]; for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k]; x[r] = s / A[r][r]; }
+  return x;
+}
+function polyfit(xs, ys, deg) {
+  const n = xs.length, m = xs.reduce((a, b) => a + b, 0) / n, sc = (Math.max(...xs) - Math.min(...xs)) / 2 || 1;
+  const t = xs.map(x => (x - m) / sc), N = deg + 1;
+  const A = Array.from({ length: N }, () => Array(N).fill(0)), b = Array(N).fill(0);
+  for (let i = 0; i < n; i++) for (let j = 0; j < N; j++) { b[j] += ys[i] * t[i] ** j; for (let k = 0; k < N; k++) A[j][k] += t[i] ** (j + k); }
+  const c = solveLin(A, b); if (!c) return null;
+  return x => { const u = (x - m) / sc; let s = 0; for (let j = N - 1; j >= 0; j--) s = s * u + c[j]; return s; };
+}
+function spline(xs, ys) {             // natural cubic spline through (sorted, distinct) points
+  const n = xs.length, h = [], al = [], l = [1], mu = [0], z = [0], c = Array(n).fill(0), b = [], d = [];
+  for (let i = 0; i < n - 1; i++) h.push(xs[i + 1] - xs[i]);
+  for (let i = 1; i < n - 1; i++) al[i] = 3 / h[i] * (ys[i + 1] - ys[i]) - 3 / h[i - 1] * (ys[i] - ys[i - 1]);
+  for (let i = 1; i < n - 1; i++) { l[i] = 2 * (xs[i + 1] - xs[i - 1]) - h[i - 1] * mu[i - 1]; mu[i] = h[i] / l[i]; z[i] = (al[i] - h[i - 1] * z[i - 1]) / l[i]; }
+  z[n - 1] = 0;
+  for (let j = n - 2; j >= 0; j--) { c[j] = z[j] - mu[j] * c[j + 1]; b[j] = (ys[j + 1] - ys[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3; d[j] = (c[j + 1] - c[j]) / (3 * h[j]); }
+  return x => { let j = 0; while (j < n - 2 && x > xs[j + 1]) j++; const u = x - xs[j]; return ys[j] + b[j] * u + c[j] * u * u + d[j] * u * u * u; };
+}
+// AS 1289.5.1.1 asks for a smooth curve of best fit "with the wet leg of the curve tending parallel to the air
+// voids line". Model: a dry leg L(w) (straight, or a parabola with 7+ points) joined smoothly to a constant-air-voids
+// curve Z(w) = rho_s (1 - A) / (1 + w rho_s / rho_w), using a smooth minimum. Fitted by least squares (Nelder-Mead).
+function smin(a, b, k) { const m = Math.min(a, b); return m - Math.log1p(Math.exp(-k * Math.abs(a - b))) / k; }
+function nelderMead(fn, x0, steps, iters = 900) {
+  const n = x0.length; let P = [x0.slice()]; for (let i = 0; i < n; i++) { const x = x0.slice(); x[i] += steps[i]; P.push(x); }
+  let F = P.map(fn);
+  for (let it = 0; it < iters; it++) {
+    const o = F.map((v, i) => i).sort((a, b) => F[a] - F[b]); P = o.map(i => P[i]); F = o.map(i => F[i]);
+    if (Math.abs(F[n] - F[0]) < 1e-14) break;
+    const c = Array(n).fill(0); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) c[j] += P[i][j] / n;
+    const pt = t => c.map((v, j) => v + t * (P[n][j] - v));
+    const xr = pt(-1), fr = fn(xr);
+    if (fr < F[0]) { const xe = pt(-2), fe = fn(xe); if (fe < fr) { P[n] = xe; F[n] = fe; } else { P[n] = xr; F[n] = fr; } }
+    else if (fr < F[n - 1]) { P[n] = xr; F[n] = fr; }
+    else { const xc = pt(fr < F[n] ? -0.5 : 0.5), fc = fn(xc);
+      if (fc < Math.min(fr, F[n])) { P[n] = xc; F[n] = fc; }
+      else { for (let i = 1; i <= n; i++) { P[i] = P[i].map((v, j) => P[0][j] + 0.5 * (v - P[0][j])); F[i] = fn(P[i]); } } }
+  }
+  return { x: P[0], f: F[0] };
+}
+function fitAS(xs, ys, gs) {
+  const n = xs.length, Z = (w, A) => gs * (1 - A) / (1 + w / 100 * gs);
+  const im = ys.indexOf(Math.max(...ys));
+  const wetA = []; for (let i = im; i < n; i++) wetA.push(1 - ys[i] / Z(xs[i], 0));
+  wetA.sort((a, b) => a - b); const A0 = Math.min(0.25, Math.max(0, im < n - 1 ? wetA[Math.floor(wetA.length / 2)] : 0.05));
+  const dI = xs.map((x, i) => i).filter(i => i <= im), wc = dI.reduce((a, i) => a + xs[i], 0) / dI.length;
+  let p1 = 0.03; if (dI.length >= 2) { const mx = wc, my = dI.reduce((a, i) => a + ys[i], 0) / dI.length; let sxy = 0, sxx = 0; dI.forEach(i => { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }); if (sxx > 0) p1 = Math.max(0.005, sxy / sxx); }
+  const p0 = dI.reduce((a, i) => a + ys[i] - p1 * (xs[i] - wc), 0) / dI.length + 0.01;
+  const quad = n >= 6 && dI.length >= 3, fixK = n < 5;
+  const unpack = t => { let j = 0; const q = { p0: t[j++], p1: t[j++], p2: quad ? t[j++] : 0, A: t[j++], k: fixK ? 80 : Math.exp(t[j++]) }; return q; };
+  // the dry leg must not turn down on the wet side (that would pull the wet leg away from the air voids line),
+  // so a curved dry leg is held level beyond its highest point
+  const Lf = (q, w) => { let d = w - wc; if (q.p2 < 0) { const dv = -q.p1 / (2 * q.p2); if (d > dv) d = dv; } return q.p0 + q.p1 * d + q.p2 * d * d; };
+  const model = q => w => smin(Lf(q, w), Z(w, q.A), q.k);
+  const obj = t => { const q = unpack(t), f = model(q); let e = 0; for (let i = 0; i < n; i++) e += (ys[i] - f(xs[i])) ** 2;
+    const pen = (q.A < -0.02 ? (q.A + 0.02) ** 2 : 0) + (q.A > 0.3 ? (q.A - 0.3) ** 2 : 0) + (q.p2 > 0 ? q.p2 ** 2 : 0) +
+      (fixK ? 0 : (q.k < 20 ? (Math.log(20 / q.k)) ** 2 : 0) + (q.k > 200 ? (Math.log(q.k / 200)) ** 2 : 0)) * 1e-3;
+    // weak preference for a moderately rounded peak, which matters only where the data leave the peak undefined
+    const prior = fixK ? 0 : 4e-5 * (Math.log(q.k / 60)) ** 2;
+    return e + 10 * pen + prior; };
+  let t0 = [p0, p1]; if (quad) t0.push(0); t0.push(A0); if (!fixK) t0.push(Math.log(60));
+  let st = [0.02, 0.008]; if (quad) st.push(0.002); st.push(0.01); if (!fixK) st.push(0.6);
+  let r = nelderMead(obj, t0, st); r = nelderMead(obj, r.x, st.map(v => v / 3));
+  const q = unpack(r.x);
+  return { f: model(q), A: q.A, k: q.k };
+}
+function fitSoil(s) {
+  const all = points(s), used = all.filter(p => !p.ex).sort((a, b) => a.w - b.w);
+  const res = { all, used, n: used.length, f: null, label: "", opt: null, bracketed: false, rms: null, suspect: null, method: null, airWet: null, note: null };
+  if (used.length < 3) return res;
+  const xs = used.map(p => p.w), ys = used.map(p => p.rho);
+  const gsS = gsOf(s);
+  let method = s.fit;
+  if (method === "auto") { method = gsS && used.length >= 4 ? "as" : "spline"; if (!gsS) res.note = "nogs"; }
+  if (method === "as" && (!gsS || used.length < 4)) { method = "spline"; res.note = !gsS ? "nogs" : "few"; }
+  if (method === "as") {
+    const r = fitAS(xs, ys, gsS); res.f = r.f; res.airWet = r.A; res.kPeak = r.k; res.label = `AS, wet leg A = ${(r.A * 100).toFixed(1)}%`; res.method = "as";
+  } else if (method === "spline") {
+    res.method = "spline";
+    // average repeated moisture contents
+    const ux = [], uy = [];
+    xs.forEach((x, i) => { const k = ux.findIndex(v => Math.abs(v - x) < 1e-9); if (k >= 0) { uy[k].push(ys[i]); } else { ux.push(x); uy.push([ys[i]]); } });
+    if (ux.length < 3) return res;
+    res.f = spline(ux, uy.map(a => a.reduce((p, q) => p + q, 0) / a.length)); res.label = "cubic spline";
+  } else {
+    let deg = Math.min(+method, used.length - 1); res.method = "poly";
+    res.f = polyfit(xs, ys, deg); res.label = "polynomial, " + ["", "", "parabola", "cubic", "quartic"][deg];
+    if (!res.f) return res;
+  }
+  res.lo = xs[0]; res.hi = xs[xs.length - 1];
+  const N = 600; let bi = 0, bv = -Infinity;
+  for (let k = 0; k <= N; k++) { const x = res.lo + (res.hi - res.lo) * k / N, v = res.f(x); if (v > bv) { bv = v; bi = k; } }
+  // refine the peak with a golden-section search around the best sample
+  let a = res.lo + (res.hi - res.lo) * Math.max(0, bi - 1) / N, b = res.lo + (res.hi - res.lo) * Math.min(N, bi + 1) / N;
+  for (let it = 0; it < 40; it++) { const m1 = a + (b - a) * 0.382, m2 = a + (b - a) * 0.618; if (res.f(m1) < res.f(m2)) a = m1; else b = m2; }
+  const wo = (a + b) / 2;
+  res.opt = { w: wo, rho: res.f(wo) };
+  res.bracketed = bi > 0 && bi < N;
+  const resid = used.map(p => ({ p, r: p.rho - res.f(p.w) }));
+  res.rms = Math.sqrt(resid.reduce((q, e) => q + e.r * e.r, 0) / used.length);
+  // outlier screen. A compaction curve rises to a single peak and then falls, so a point that breaks this
+  // pattern (a dip on the dry side or a bump on the wet side) is suspect; so is a point far from the fit.
+  res.suspect = null;
+  if (used.length >= 5) {
+    const refit = skip => { const o = used.filter((_, j) => j !== skip); const xs2 = o.map(q => q.w), ys2 = o.map(q => q.rho);
+      const g = polyfit(xs2, ys2, Math.min(o.length >= 5 ? 3 : 2, o.length - 1));
+      return g ? Math.sqrt(o.reduce((a, q) => a + (q.rho - g(q.w)) ** 2, 0) / o.length) : null; };
+    const m = ys.indexOf(Math.max(...ys)); let cands = [];
+    for (let k = 0; k < ys.length - 1; k++) {
+      const rising = k + 1 <= m, bad = rising ? ys[k + 1] <= ys[k] : ys[k + 1] >= ys[k];
+      if (bad) cands.push(k, k + 1);
+    }
+    cands = [...new Set(cands)].filter(k => k !== m || cands.length === 1);
+    if (cands.length) {
+      let best = null; for (const k of cands) { const r = refit(k); if (r != null && (!best || r < best.rms)) best = { k, rms: r }; }
+      if (best) { const p = used[best.k], g = polyfit(xs.filter((_, j) => j !== best.k), ys.filter((_, j) => j !== best.k), 2);
+        res.suspect = { p, r: g ? p.rho - g(p.w) : p.rho - res.f(p.w), why: "pattern" }; }
+    } else if (used.length >= 6 && res.method !== "spline") {
+      const ab = resid.map(e => Math.abs(e.r)).sort((a, b) => a - b), mad = 1.48 * ab[Math.floor(ab.length / 2)];
+      const w = resid.reduce((q, e) => (!q || Math.abs(e.r) > Math.abs(q.r) ? e : q), null);
+      if (Math.abs(w.r) > 0.02 && Math.abs(w.r) > 3.5 * Math.max(mad, 0.004)) res.suspect = { p: w.p, r: w.r, why: "far" };
+    }
+  }
+  res.dry = used.filter(p => p.w < wo - 1e-9).length; res.wet = used.filter(p => p.w > wo + 1e-9).length;
+  return res;
+}
+const gsOf = s => { const g = num(s.gs); return g && g > 1.5 && g < 4 ? g : null; };
+const zav = (gs, w, A = 0) => gs * (1 - A) / (1 + w / 100 * gs);        // t/m3
+
+// ---------------------------------------------------------------- soil editor
+function renderTabs() {
+  const t = $("tabs"); t.innerHTML = "";
+  soils.forEach((s, i) => {
+    const b = document.createElement("button"); b.className = "tab"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", i === active);
+    b.innerHTML = `<span class="dot" style="background:var(--s${s.col + 1})"></span>`; b.appendChild(document.createTextNode(s.name || `Soil ${i + 1}`));
+    b.onclick = () => { active = i; renderSoil(); };
+    t.appendChild(b);
+  });
+  $("delSoil").disabled = soils.length < 2; $("addSoil").disabled = soils.length >= 6;
+}
+const VALHEAD = { rho: "<i>ρ</i><sub>d</sub><br>(t/m³)", gam: "<i>γ</i><sub>d</sub><br>(kN/m³)", mass: "Wet mass<br>(g)" };
+function renderSoil() {
+  const s = soils[active]; renderTabs();
+  $("sName").value = s.name; $("sGs").value = s.gs ?? ""; $("sMode").value = s.mode; $("sV").value = s.V ?? ""; $("sFit").value = s.fit;
+  $("fV").hidden = s.mode !== "mass"; $("gsMsg").hidden = true;
+  const calcHead = s.mode === "rho" ? "<i>γ</i><sub>d</sub><br>(kN/m³)" : "<i>ρ</i><sub>d</sub><br>(t/m³)";
+  let h = `<thead><tr><th>Use</th><th>#</th><th><i>w</i><br>(%)</th><th>${VALHEAD[s.mode]}</th><th>${calcHead}</th><th></th><th></th></tr></thead><tbody>`;
+  s.rows.forEach((r, i) => {
+    h += `<tr data-i="${i}"${r.ex ? ' class="ex"' : ""}><td><input type="checkbox" data-k="use" ${r.ex ? "" : "checked"} aria-label="Use point ${i + 1}"></td><td class="calc">${i + 1}</td>` +
+      `<td><input type="text" inputmode="decimal" data-k="w" value="${r.w}" aria-label="Moisture content, point ${i + 1}"></td>` +
+      `<td><input type="text" inputmode="decimal" data-k="v" value="${r.v}" aria-label="Value, point ${i + 1}"></td>` +
+      `<td class="calc" data-c="calc"></td><td class="flag" data-c="flag"></td><td><button class="del" data-k="del" aria-label="Delete point ${i + 1}">×</button></td></tr>`;
+  });
+  $("tbl").innerHTML = h + "</tbody>";
+  refreshCalc();
+}
+function refreshCalc() {               // computed column and flags, without rebuilding the inputs
+  const s = soils[active], gs = gsOf(s);
+  $("tbl").querySelectorAll("tbody tr").forEach(tr => {
+    const i = +tr.dataset.i, r = s.rows[i], rho = rhoOf(s, r), w = num(r.w);
+    tr.classList.toggle("ex", r.ex);
+    tr.querySelector('[data-c="calc"]').textContent = rho == null ? "" : s.mode === "rho" ? (rho * G).toFixed(2) : rho.toFixed(3);
+    let flag = "";
+    if (rho != null && w != null && gs && rho > zav(gs, w) + 0.002) flag = "above ZAV";
+    tr.querySelector('[data-c="flag"]').textContent = flag;
+  });
+}
+$("tbl").addEventListener("input", e => {
+  const tr = e.target.closest("tr"); if (!tr) return; const r = soils[active].rows[+tr.dataset.i], k = e.target.dataset.k;
+  if (k === "w" || k === "v") { r[k] = e.target.value; refreshCalc(); update(); }
+});
+$("tbl").addEventListener("change", e => {
+  const tr = e.target.closest("tr"); if (!tr) return;
+  if (e.target.dataset.k === "use") { soils[active].rows[+tr.dataset.i].ex = !e.target.checked; refreshCalc(); update(); }
+});
+$("tbl").addEventListener("click", e => {
+  if (e.target.dataset.k !== "del") return; const tr = e.target.closest("tr");
+  soils[active].rows.splice(+tr.dataset.i, 1); renderSoil(); update();
+});
+$("sName").oninput = e => { soils[active].name = e.target.value; renderTabs(); update(); };
+$("sGs").oninput = e => { soils[active].gs = e.target.value; refreshCalc(); update(); };
+$("estGs").onclick = () => {
+  // AS 1289.5.1.1 note: take the dry density of the wettest point, nominate an air voids content (2% often works)
+  // and find the particle density that puts a point 1% wetter on that air voids line.
+  const s = soils[active], u = points(s).filter(p => !p.ex).sort((a, b) => a.w - b.w), m = $("gsMsg"); m.hidden = false;
+  if (u.length < 2) { m.textContent = "Enter the test results first."; return; }
+  const p = u[u.length - 1], A = 0.02, w1 = (p.w + 1) / 100, inv = (1 - A) / p.rho - w1;
+  if (!(inv > 0)) { m.textContent = "Could not estimate the particle density from these data."; return; }
+  const rs = 1 / inv; s.gs = rs.toFixed(2); $("sGs").value = s.gs;
+  m.textContent = `Estimated ρs = ${rs.toFixed(2)} t/m³: the dry density of the wettest point (${p.rho.toFixed(3)} t/m³) on the 2% air voids line at ${(p.w + 1).toFixed(1)}% moisture. ` +
+    (rs < 2.3 || rs > 3.0 ? "This is outside the usual range for soils; use a measured value (AS 1289.3.5.1) if you can." : "A rough check only: a measured value (AS 1289.3.5.1) is better.");
+  refreshCalc(); update();
+};
+$("sV").oninput = e => { soils[active].V = e.target.value; refreshCalc(); update(); };
+$("sFit").onchange = e => { soils[active].fit = e.target.value; update(); };
+$("sMode").onchange = e => {
+  // convert the entered values so the points stay where they are
+  const s = soils[active], old = s.mode, nu = e.target.value, V = num(s.V) || 1000;
+  s.rows.forEach(r => {
+    const rho = rhoOf(s, r), w = num(r.w); if (rho == null) return;
+    r.v = nu === "rho" ? rho.toFixed(3) : nu === "gam" ? (rho * G).toFixed(2) : (rho * V * (1 + w / 100)).toFixed(1);
+  });
+  if (nu === "mass" && !num(s.V)) s.V = 1000;
+  s.mode = nu; renderSoil(); update();
+};
+$("addRow").onclick = () => { soils[active].rows.push({ w: "", v: "", ex: false }); renderSoil(); const ins = $("tbl").querySelectorAll('input[data-k="w"]'); ins[ins.length - 1].focus(); };
+$("clearRows").onclick = () => { soils[active].rows = [0, 1, 2, 3, 4].map(() => ({ w: "", v: "", ex: false })); renderSoil(); update(); };
+$("addSoil").onclick = () => {
+  const used = soils.map(s => s.col); let c = 0; while (used.includes(c) && c < 5) c++;
+  const s = makeSoil({ name: `Soil ${soils.length + 1}`, gs: soils[active] ? soils[active].gs : 2.70, mode: soils[active] ? soils[active].mode : "rho", V: soils[active] ? soils[active].V : 1000 });
+  s.col = c; for (let i = 0; i < 5; i++) s.rows.push({ w: "", v: "", ex: false });
+  soils.push(s); active = soils.length - 1; renderSoil(); update();
+};
+$("delSoil").onclick = () => { if (soils.length < 2) return; soils.splice(active, 1); active = Math.max(0, active - 1); renderSoil(); update(); };
+
+// paste and CSV
+function splitRows(text) {
+  const lines = text.replace(/\r/g, "").split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+  const delim = lines.some(l => l.includes("\t")) ? "\t" : lines.some(l => l.includes(",") && !/^\s*[\d.]+,\d+\s*$/.test(l)) ? "," : lines.some(l => l.includes(";")) ? ";" : /\s+/;
+  return lines.map(l => l.split(delim).map(c => c.trim().replace(/^"(.*)"$/, "$1")));
+}
+function parsePairs(text) {
+  let rows = splitRows(text);
+  if (rows.length && num(rows[0][0]) == null) rows = rows.slice(1);           // header
+  const out = rows.filter(r => r.length >= 2 && num(r[0]) != null && num(r[1]) != null).map(r => ({ w: r[0], v: r[1], ex: false }));
+  return out;
+}
+$("pasteBtn").onclick = () => { $("pasteBox").hidden = false; $("pasteText").focus(); };
+$("pasteCancel").onclick = () => { $("pasteBox").hidden = true; $("pasteMsg").textContent = ""; };
+function doPaste(replace) {
+  const p = parsePairs($("pasteText").value);
+  if (!p.length) { $("pasteMsg").textContent = "No pairs of numbers found."; return; }
+  const s = soils[active]; s.rows = replace ? p : s.rows.filter(r => r.w !== "" || r.v !== "").concat(p);
+  guessMode(s); $("pasteBox").hidden = true; $("pasteMsg").textContent = ""; renderSoil(); update();
+}
+$("pasteReplace").onclick = () => doPaste(true);
+$("pasteAppend").onclick = () => doPaste(false);
+function guessMode(s) {                // pick the unit from the size of the values
+  const vs = s.rows.map(r => num(r.v)).filter(v => v != null); if (!vs.length) return;
+  const m = vs.reduce((a, b) => a + b, 0) / vs.length;
+  s.mode = m < 4 ? "rho" : m < 40 ? "gam" : "mass";
+  if (s.mode === "mass" && !num(s.V)) s.V = 1000;
+}
+$("csv").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    let rows = splitRows(rd.result); let header = null;
+    if (rows.length && num(rows[0][rows[0].length > 2 ? 1 : 0]) == null) { header = rows[0]; rows = rows.slice(1); }
+    const three = rows.some(r => r.length >= 3 && num(r[0]) == null && num(r[1]) != null);
+    if (three) {
+      const by = new Map();
+      rows.forEach(r => { if (num(r[1]) == null || num(r[2]) == null) return; const k = r[0] || "Soil"; if (!by.has(k)) by.set(k, []); by.get(k).push({ w: r[1], v: r[2], ex: false }); });
+      if (!by.size) { $("csvMsg").textContent = "Could not read the file."; return; }
+      nextColour = 0; soils = [...by.entries()].slice(0, 6).map(([name, rws]) => { const s = makeSoil({ name, gs: 2.70 }); s.rows = rws; guessMode(s); return s; });
+      $("csvMsg").textContent = `Loaded ${soils.length} soil${soils.length > 1 ? "s" : ""}${by.size > 6 ? " (the first six)" : ""}. Check the units and Gs of each.`;
+      active = 0;
+    } else {
+      const p = rows.filter(r => r.length >= 2 && num(r[0]) != null && num(r[1]) != null).map(r => ({ w: r[0], v: r[1], ex: false }));
+      if (!p.length) { $("csvMsg").textContent = "Could not read the file: expected moisture content and value columns."; return; }
+      soils[active].rows = p; guessMode(soils[active]);
+      $("csvMsg").textContent = `Loaded ${p.length} points into ${soils[active].name}.`;
+    }
+    renderSoil(); update();
+  };
+  rd.readAsText(f); e.target.value = "";
+};
+
+// ---------------------------------------------------------------- chart
+const svg = $("svg"), NS = "http://www.w3.org/2000/svg";
+let W = 600, H = 430; const M = { l: 56, r: 16, t: 14, b: 44 };
+let X0 = 0, X1 = 30, Y0 = 1.4, Y1 = 2.2, fits = [], hover = null, hits = [];
+function el(tag, a, p) { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); (p || svg).appendChild(e); return e; }
+const yk = () => $("yUnit").value === "gam" ? G : 1;              // display factor
+const px = w => M.l + (w - X0) / (X1 - X0) * (W - M.l - M.r);
+const py = r => H - M.b - (r * yk() - Y0) / (Y1 - Y0) * (H - M.t - M.b);
+const ixw = x => X0 + (x - M.l) / (W - M.l - M.r) * (X1 - X0);
+const iyv = y => Y0 + (H - M.b - y) / (H - M.t - M.b) * (Y1 - Y0);
+function sizeChart() { const w = Math.max(300, Math.round(svg.parentNode.clientWidth - 32)); if (Math.abs(w - W) < 2) return false; W = w; H = Math.round(Math.max(300, Math.min(w * 0.72, 480))); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); return true; }
+new ResizeObserver(() => { if (sizeChart()) draw(); }).observe(svg.parentNode);
+function niceStep(range, target) { const raw = range / target, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+function setRanges() {
+  const pts = fits.flatMap(f => f.all); if (!pts.length) return false;
+  const k = yk(), ws = pts.map(p => p.w), rs = pts.map(p => p.rho * k);
+  let a = Math.min(...ws), b = Math.max(...ws); const pad = Math.max(1, (b - a) * 0.12);
+  const sx = niceStep(b - a + 2 * pad, 8); X0 = Math.max(0, Math.floor((a - pad) / sx) * sx); X1 = Math.ceil((b + pad) / sx) * sx;
+  let lo = Math.min(...rs), hi = Math.max(...rs);
+  fits.forEach(f => { if (f.opt) hi = Math.max(hi, f.opt.rho * k); });
+  const span = Math.max(hi - lo, 0.08 * k), padY = span * 0.18;
+  const sy = niceStep(span + 2.6 * padY, 7); Y0 = Math.floor((lo - padY) / sy) * sy; Y1 = Math.ceil((hi + padY * 1.6) / sy) * sy;
+  return { sx, sy };
+}
+function marker(i, x, y, col, hollow) {
+  const st = hollow ? `fill:var(--panel);stroke:${col};stroke-width:1.5` : `fill:${col};stroke:var(--panel);stroke-width:1.5`, r = 4.4;
+  const s = i % SHAPES;
+  if (s === 0) return el("circle", { cx: x, cy: y, r, style: st });
+  if (s === 1) return el("rect", { x: x - r, y: y - r, width: 2 * r, height: 2 * r, style: st });
+  if (s === 2) return el("path", { d: `M${x},${y - r - 1}L${x + r + 1},${y + r}L${x - r - 1},${y + r}Z`, style: st });
+  return el("path", { d: `M${x},${y - r - 1.2}L${x + r + 1.2},${y}L${x},${y + r + 1.2}L${x - r - 1.2},${y}Z`, style: st });
+}
+function clipPath(pts) {               // keep only the parts inside the plot box
+  const inside = ([x, y]) => x >= M.l - 0.5 && x <= W - M.r + 0.5 && y >= M.t - 0.5 && y <= H - M.b + 0.5;
+  const segs = []; let cur = [];
+  for (const p of pts) { if (inside(p)) cur.push(p); else { if (cur.length > 1) segs.push(cur); cur = []; } }
+  if (cur.length > 1) segs.push(cur);
+  return segs;
+}
+const poly = (pts, attrs) => clipPath(pts).forEach(sg => el("polyline", Object.assign({ points: sg.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ") }, attrs)));
+function draw() {
+  svg.textContent = ""; hits = [];
+  const ok = setRanges();
+  if (!ok) { el("text", { class: "empty", x: W / 2, y: H / 2, "text-anchor": "middle" }).textContent = "Enter at least three points to draw a curve."; return; }
+  const k = yk(), { sx, sy } = ok;
+  // grid
+  for (let w = X0; w <= X1 + 1e-9; w += sx / 2) { const maj = Math.abs(w / sx - Math.round(w / sx)) < 1e-6; el("line", { class: maj ? "gmaj" : "gmin", x1: px(w), y1: M.t, x2: px(w), y2: H - M.b }); if (maj) el("text", { class: "tick", x: px(w), y: H - M.b + 15, "text-anchor": "middle" }).textContent = +w.toFixed(6); }
+  const dec = Math.max(0, -Math.floor(Math.log10(sy) + 1e-9));
+  for (let v = Y0; v <= Y1 + 1e-9; v += sy / 2) { const maj = Math.abs(v / sy - Math.round(v / sy)) < 1e-6; const y = H - M.b - (v - Y0) / (Y1 - Y0) * (H - M.t - M.b); el("line", { class: maj ? "gmaj" : "gmin", x1: M.l, y1: y, x2: W - M.r, y2: y }); if (maj) el("text", { class: "tick", x: M.l - 6, y: y + 3.5, "text-anchor": "end" }).textContent = v.toFixed(dec); }
+  el("line", { class: "ax", x1: M.l, y1: H - M.b, x2: W - M.r, y2: H - M.b }); el("line", { class: "ax", x1: M.l, y1: M.t, x2: M.l, y2: H - M.b });
+  el("text", { class: "axlab", x: (M.l + W - M.r) / 2, y: H - 8, "text-anchor": "middle" }).textContent = "Moisture content, w (%)";
+  const cy = (M.t + H - M.b) / 2; const yl = el("text", { class: "axlab", x: 14, y: cy, "text-anchor": "middle", transform: `rotate(-90 14 ${cy})` });
+  yl.appendChild(document.createTextNode(k === 1 ? "Dry density, ρ" : "Dry unit weight, γ"));
+  el("tspan", { dy: 3, "font-size": "9.5px" }, yl).textContent = "d";
+  el("tspan", { dy: -3 }, yl).textContent = k === 1 ? " (t/m³)" : " (kN/m³)";
+  const obstacles = [];                 // sampled screen points for legend placement
+  // zero air voids and air content lines, one set per distinct Gs
+  const gsList = [...new Set(soils.map(gsOf).filter(Boolean).map(g => g.toFixed(3)))].map(Number);
+  const ws = []; for (let i = 0; i <= 200; i++) ws.push(X0 + (X1 - X0) * i / 200);
+  const multi = gsList.length > 1;
+  gsList.forEach((gs, gi) => {
+    const owner = soils.find(s => gsOf(s) && gsOf(s).toFixed(3) === gs.toFixed(3)), tint = multi && owner ? `stroke:var(--s${owner.col + 1})` : "";
+    const lines = [];
+    if ($("showZav").checked) lines.push([0, "zav", gi === 0 ? "Zero air voids" : ""]);
+    if ($("showAir").checked) lines.push([0.05, "air", gi === 0 ? "A = 5%" : ""], [0.10, "air", gi === 0 ? "A = 10%" : ""]);
+    for (const [A, cls, lab] of lines) {
+      const pts = ws.map(w => [px(w), py(zav(gs, w, A))]); poly(pts, tint ? { class: cls, style: tint } : { class: cls });
+      clipPath(pts).forEach(sg => sg.forEach(p => obstacles.push(p)));
+      if (!lab) continue;
+      // label near the right end of the visible part, just above the line
+      const vis = pts.filter(([x, y]) => x > M.l + 20 && x < W - M.r - 10 && y > M.t + 12 && y < H - M.b - 6);
+      if (vis.length) {
+        const [x, y] = vis[Math.max(0, vis.length - 1 - (A ? (A > 0.07 ? 30 : 18) : 0))];
+        const j = pts.findIndex(p => p[0] === x); const [x2, y2] = pts[Math.max(0, j - 3)];
+        const ang = Math.atan2(y - y2, x - x2) * 180 / Math.PI;
+        el("text", { class: "zlab", x, y: y - 5, "text-anchor": "end", transform: `rotate(${ang.toFixed(1)} ${x} ${y})` }).textContent = lab;
+      }
+    }
+  });
+  // fitted curves and optimum guides
+  const opts = [];
+  fits.forEach((f, si) => {
+    const s = soils[si], col = `var(--s${s.col + 1})`;
+    if (f.f) {
+      const pts = []; for (let i = 0; i <= 160; i++) { const w = f.lo + (f.hi - f.lo) * i / 160; pts.push([px(w), py(f.f(w))]); }
+      poly(pts, { style: `fill:none;stroke:${col};stroke-width:2.2;stroke-linejoin:round` });
+      pts.forEach(p => obstacles.push(p));
+    }
+    if (f.method === "as" && f.opt && f.airWet != null) {
+      const gs = gsOf(s), pts = []; for (let i = 0; i <= 80; i++) { const w = f.opt.w + (X1 - f.opt.w) * i / 80; pts.push([px(w), py(zav(gs, w, f.airWet))]); }
+      poly(pts, { style: `fill:none;stroke:${col};stroke-width:1;stroke-dasharray:1.5 3;opacity:0.9` });
+    }
+    if (f.opt && $("showGuides").checked) {
+      const x = px(f.opt.w), y = py(f.opt.rho);
+      el("line", { class: "guide", x1: x, y1: y, x2: x, y2: H - M.b, style: `stroke:${col}` });
+      el("line", { class: "guide", x1: M.l, y1: y, x2: x, y2: y, style: `stroke:${col}` });
+      opts.push({ si, x, y, col, f });
+    }
+  });
+  if ($("showLopt").checked) {
+    const o = fits.map(f => f.opt).filter(Boolean).sort((a, b) => a.w - b.w);
+    if (o.length > 1) el("polyline", { class: "lopt", points: o.map(p => `${px(p.w).toFixed(1)},${py(p.rho).toFixed(1)}`).join(" ") });
+  }
+  // points (excluded ones hollow with a cross)
+  fits.forEach((f, si) => {
+    const s = soils[si], col = `var(--s${s.col + 1})`;
+    f.all.forEach(p => {
+      const x = px(p.w), y = py(p.rho); if (x < M.l - 2 || x > W - M.r + 2 || y < M.t - 2 || y > H - M.b + 2) return;
+      marker(s.col, x, y, col, p.ex);
+      if (p.ex) { el("line", { x1: x - 6, y1: y - 6, x2: x + 6, y2: y + 6, style: `stroke:${col};stroke-width:1.4` }); el("line", { x1: x - 6, y1: y + 6, x2: x + 6, y2: y - 6, style: `stroke:${col};stroke-width:1.4` }); }
+      obstacles.push([x, y]);
+      hits.push({ si, i: p.i, x, y, p });
+    });
+  });
+  // optimum markers and labels
+  opts.forEach((o, n) => {
+    el("circle", { cx: o.x, cy: o.y, r: 6.5, style: `fill:none;stroke:${o.col};stroke-width:2` });
+    const val = k === 1 ? o.f.opt.rho.toFixed(2) : (o.f.opt.rho * G).toFixed(1);
+    const t = el("text", { class: "optlab", x: o.x, y: o.y - 12, "text-anchor": "middle", style: `fill:${o.col}` });
+    t.textContent = `${val} @ ${o.f.opt.w.toFixed(1)}%`;
+    // nudge labels that would overlap an earlier label
+    for (let m = 0; m < n; m++) { const q = opts[m]; if (q.ly != null && Math.abs(q.lx - o.x) < 95 && Math.abs(q.ly - (o.y - 12)) < 14) { t.setAttribute("y", o.y + 22); break; } }
+    o.lx = o.x; o.ly = +t.getAttribute("y"); obstacles.push([o.x - 40, o.ly], [o.x + 40, o.ly], [o.x, o.ly]);
+  });
+  drawLegend(obstacles);
+  drawHover();
+}
+function drawLegend(obs) {
+  const items = soils.map((s, i) => ({ s, f: fits[i] })).filter(x => x.f.all.length);
+  if (!items.length) return;
+  const lh = 17, wBox = Math.min(220, Math.max(...items.map(x => (x.s.name || "Soil").length)) * 6.6 + 44), hBox = items.length * lh + 8;
+  const cands = [[M.l + 8, M.t + 8], [W - M.r - wBox - 8, H - M.b - hBox - 8], [M.l + 8, H - M.b - hBox - 8], [W - M.r - wBox - 8, M.t + 8]];
+  let best = cands[0], bestHits = Infinity;
+  for (const [x, y] of cands) { const hcount = obs.filter(([a, b]) => a >= x - 4 && a <= x + wBox + 4 && b >= y - 4 && b <= y + hBox + 4).length; if (hcount < bestHits) { bestHits = hcount; best = [x, y]; } }
+  const [x0, y0] = best;
+  el("rect", { class: "legbox", x: x0, y: y0, width: wBox, height: hBox, rx: 5 });
+  items.forEach(({ s }, n) => {
+    const y = y0 + 4 + lh * n + lh / 2, col = `var(--s${s.col + 1})`;
+    el("line", { x1: x0 + 8, y1: y, x2: x0 + 30, y2: y, style: `stroke:${col};stroke-width:2.2` });
+    marker(s.col, x0 + 19, y, col);
+    el("text", { class: "legend", x: x0 + 36, y: y + 4 }).textContent = s.name || "Soil";
+  });
+}
+function drawHover() {
+  if (!hover) return;
+  const [x, y] = hover;
+  if (x < M.l || x > W - M.r || y < M.t || y > H - M.b) return;
+  const near = nearestHit(x, y);
+  const k = yk();
+  if (near) {
+    const p = near.p, s = soils[near.si];
+    el("circle", { cx: near.x, cy: near.y, r: 9, style: `fill:none;stroke:var(--ink);stroke-width:1;opacity:0.6` });
+    const t = el("text", { class: "crosslab", x: near.x + 12, y: near.y - 10, "text-anchor": "start" });
+    t.textContent = `${s.name}: ${p.w.toFixed(1)}%, ${k === 1 ? p.rho.toFixed(3) + " t/m³" : (p.rho * G).toFixed(2) + " kN/m³"} (${p.ex ? "excluded: click to include" : "click to exclude"})`;
+    fitText(t, near.x, 12);
+    return;
+  }
+  el("line", { class: "cross", x1: x, y1: M.t, x2: x, y2: H - M.b }); el("line", { class: "cross", x1: M.l, y1: y, x2: W - M.r, y2: y });
+  const t = el("text", { class: "crosslab", x: x + 8, y: y - 8, "text-anchor": "start" });
+  t.textContent = `${ixw(x).toFixed(1)}%, ${iyv(y).toFixed(k === 1 ? 3 : 2)} ${k === 1 ? "t/m³" : "kN/m³"}`;
+  fitText(t, x, 8);
+}
+function fitText(t, x, gap) {              // flip a label to the left of the pointer if it would run off the plot
+  let len = 0; try { len = t.getComputedTextLength(); } catch (e) { return; }
+  if (x + gap + len > W - 4) {
+    if (x - gap - len >= 4) { t.setAttribute("x", x - gap); t.setAttribute("text-anchor", "end"); }
+    else { t.setAttribute("x", Math.max(4, W - 4 - len)); t.setAttribute("text-anchor", "start"); }
+  }
+}
+function nearestHit(x, y) { let b = null, bd = 14 * 14; for (const h of hits) { const d = (h.x - x) ** 2 + (h.y - y) ** 2; if (d < bd) { bd = d; b = h; } } return b; }
+const toSvg = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+svg.addEventListener("pointermove", e => { hover = toSvg(e); draw(); });
+svg.addEventListener("pointerleave", () => { hover = null; draw(); });
+svg.addEventListener("click", e => {
+  const [x, y] = toSvg(e), h = nearestHit(x, y); if (!h) return;
+  const r = soils[h.si].rows[h.i]; r.ex = !r.ex;
+  if (h.si !== active) { active = h.si; renderSoil(); } else refreshCalc();
+  const cb = $("tbl").querySelector(`tr[data-i="${h.i}"] input[data-k="use"]`); if (cb) cb.checked = !r.ex;
+  hover = [x, y]; update();
+});
+["showZav", "showAir", "showGuides", "showLopt"].forEach(id => $(id).onchange = draw);
+$("yUnit").onchange = () => { update(); };
+
+// ---------------------------------------------------------------- results
+const fmtRho = v => v.toFixed(2), fmtGam = v => (v * G).toFixed(1);
+function satAir(gs, w, rho) {             // degree of saturation and air content at (w, rho)
+  const e = gs / rho - 1, S = w / 100 * gs / e, A = 1 - rho * (1 + w / 100 * gs) / gs;
+  return { S, A };
+}
+function checksFor(s, f) {
+  const out = [], gs = gsOf(s), name = s.name || "Soil";
+  if (f.all.length && f.n < 3) { out.push(["bad", `${name}: at least three points are needed to fit a curve (${f.n} in use).`]); return out; }
+  if (f.note === "nogs") out.push(["hint", `${name}: enter the particle density ρ<sub>s</sub> (or press Estimate) to fit the curve as AS 1289.5.1.1 describes, with its wet leg parallel to an air voids line. Until then a cubic spline through the points is used, which the standard also allows.`]);
+  if (!f.opt) return out;
+  if (f.n < 5) out.push(["hint", `${name}: only ${f.n} points in use. A reliable curve normally needs at least five, with the optimum well bracketed.`]);
+  if (!f.bracketed) out.push(["bad", `${name}: the highest point of the curve is at the ${f.opt.w < (f.lo + f.hi) / 2 ? "dry" : "wet"} end of the data, so the optimum is not bracketed. Compact more specimens ${f.opt.w < (f.lo + f.hi) / 2 ? "drier" : "wetter"} than ${f.opt.w.toFixed(1)}%.`]);
+  else if (f.dry < 2 || f.wet < 2) out.push(["hint", `${name}: ${f.dry} point${f.dry === 1 ? "" : "s"} dry and ${f.wet} wet of the optimum. At least two on each side define the peak more reliably.`]);
+  const gaps = f.used.slice(1).map((p, i) => p.w - f.used[i].w), big = Math.max(...gaps);
+  if (big > 4) out.push(["hint", `${name}: there is a ${big.toFixed(1)}% gap in moisture content between neighbouring points. The curve is poorly defined there; increments of 1–3% are usual.`]);
+  if (gs) {
+    const above = f.all.filter(p => p.rho > zav(gs, p.w) + 0.002);
+    if (above.length) out.push(["bad", `${name}: point${above.length > 1 ? "s" : ""} ${above.map(p => "#" + (p.i + 1)).join(", ")} lie${above.length > 1 ? "" : "s"} above the zero-air-void curve, which is impossible. Check the measurements and G<sub>s</sub>.`]);
+    const { S } = satAir(gs, f.opt.w, f.opt.rho);
+    if (f.method === "as" && f.airWet < 0.005) out.push(["hint", `${name}: the wet leg follows an air voids line of ${(f.airWet * 100).toFixed(1)}%, i.e. close to saturation. Check ρ<sub>s</sub>: if it is too low, the wet points sit too close to the zero-air-void curve.`]);
+    if (S > 0.97) out.push(["bad", `${name}: the optimum is at or above saturation (S = ${(S * 100).toFixed(0)}%). Check G<sub>s</sub> and the data.`]);
+  }
+  if (f.suspect) {
+    const p = f.suspect.p, k = yk();
+    out.push(["hint", `${name}: point #${p.i + 1} (${p.w.toFixed(1)}%) ${f.suspect.why === "pattern" ? `breaks the usual rise-and-fall pattern of a compaction curve: it is ${f.suspect.r < 0 ? "lower" : "higher"} than its neighbours suggest` : `lies ${Math.abs(f.suspect.r * k).toFixed(k === 1 ? 3 : 2)} ${k === 1 ? "t/m³" : "kN/m³"} ${f.suspect.r < 0 ? "below" : "above"} the curve, well outside the scatter of the other points`}. Is it an outlier? Click it on the plot to see the curve without it, and check the test record before discarding it.`]);
+  }
+  return out;
+}
+function renderResults() {
+  const k = yk();
+  let h = `<thead><tr><th>Soil</th><th>Points<br>used</th><th>Curve</th><th>MDD,<br><i>ρ</i><sub>d max</sub> (t/m³)</th><th><i>γ</i><sub>d max</sub><br>(kN/m³)</th><th>OMC,<br><i>w</i><sub>opt</sub> (%)</th><th><i>S</i> at<br>OMC (%)</th><th><i>A</i> at<br>OMC (%)</th></tr></thead><tbody>`;
+  const msgs = [];
+  soils.forEach((s, i) => {
+    const f = fits[i], gs = gsOf(s), sa = f.opt && gs ? satAir(gs, f.opt.w, f.opt.rho) : null;
+    const nm = `<span class="dot" style="background:var(--s${s.col + 1});margin-right:6px"></span>${esc(s.name || "Soil")}`;
+    h += `<tr><td>${nm}</td><td>${f.n}${f.all.length > f.n ? ` of ${f.all.length}` : ""}</td><td>${f.f ? f.label : "–"}</td>` +
+      `<td class="big">${f.opt ? fmtRho(f.opt.rho) : "–"}</td><td class="big">${f.opt ? fmtGam(f.opt.rho) : "–"}</td><td class="big">${f.opt ? f.opt.w.toFixed(1) : "–"}</td>` +
+      `<td>${sa ? (sa.S * 100).toFixed(0) : "–"}</td><td>${sa ? (sa.A * 100).toFixed(1) : "–"}</td></tr>`;
+    msgs.push(...checksFor(s, f));
+  });
+  $("res").innerHTML = h + "</tbody>";
+  const anyOpt = fits.some(f => f.opt);
+  $("msgs").innerHTML = msgs.map(([c, t]) => `<div class="msg ${c}"><p>${t}</p></div>`).join("") ||
+    (anyOpt ? `<div class="msg ok"><p>Each curve has its optimum bracketed by the data and no point stands out from the rest.</p></div>` : "");
+}
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function update() { fits = soils.map(fitSoil); draw(); renderResults(); }
+
+// ---------------------------------------------------------------- exports
+const PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linejoin", "opacity", "font-family", "font-size", "font-weight", "font-style", "paint-order"];
+function exportSVG() {
+  const keep = hover; hover = null; draw();
+  const clone = svg.cloneNode(true), src = svg.querySelectorAll("*"), dst = clone.querySelectorAll("*");
+  src.forEach((n, i) => { const cs = getComputedStyle(n); dst[i].setAttribute("style", PROPS.map(p => `${p}:${cs.getPropertyValue(p)}`).join(";")); dst[i].removeAttribute("class"); });
+  clone.setAttribute("xmlns", NS); clone.setAttribute("width", W); clone.setAttribute("height", H);
+  const bg = document.createElementNS(NS, "rect"); bg.setAttribute("width", W); bg.setAttribute("height", H);
+  bg.setAttribute("fill", getComputedStyle(document.querySelector(".chart")).backgroundColor); clone.insertBefore(bg, clone.firstChild);
+  hover = keep; draw();
+  return new XMLSerializer().serializeToString(clone);
+}
+// In the claude.ai viewer files are offered through its downloads capability; elsewhere (e.g. GitHub Pages) a plain link is used.
+let dlCap = null;
+try { if (window.claude && typeof window.claude.use === "function") window.claude.use("downloads").then(n => { dlCap = n; }).catch(() => {}); } catch (e) {}
+async function download(blob, name) {
+  $("dlMsg").textContent = "";
+  if (dlCap) {
+    try { await dlCap.save({ filename: name, data: blob }); }
+    catch (err) { const c = err && err.code; if (c !== "declined") $("dlMsg").textContent = c === "rate_limited" ? "Another download is waiting for confirmation; try again in a moment." : "Downloads are not available in this view."; }
+    return;
+  }
+  try { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500); }
+  catch (err) { $("dlMsg").textContent = "This browser blocked the download."; }
+}
+const csvCell = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
+const csv = rows => rows.map(r => r.map(csvCell).join(",")).join("\n") + "\n";
+$("dlSvg").onclick = () => download(new Blob([exportSVG()], { type: "image/svg+xml" }), "compaction-curves.svg");
+$("dlPng").onclick = () => {
+  const img = new Image(), url = URL.createObjectURL(new Blob([exportSVG()], { type: "image/svg+xml" }));
+  img.onload = () => { const c = document.createElement("canvas"); c.width = W * 2; c.height = H * 2; const g = c.getContext("2d"); g.scale(2, 2); g.drawImage(img, 0, 0); URL.revokeObjectURL(url); c.toBlob(b => download(b, "compaction-curves.png")); };
+  img.src = url;
+};
+$("dlRes").onclick = () => {
+  const rows = [["Soil", "Particle density (t/m3)", "Points used", "Points excluded", "Curve", "MDD (t/m3)", "Max dry unit weight (kN/m3)", "OMC (%)", "S at OMC (%)", "A at OMC (%)", "Wet-leg air voids (%)", "Optimum bracketed", "Notes"]];
+  soils.forEach((s, i) => {
+    const f = fits[i], gs = gsOf(s), sa = f.opt && gs ? satAir(gs, f.opt.w, f.opt.rho) : null;
+    rows.push([s.name, gs ?? "", f.n, f.all.length - f.n, f.label, f.opt ? f.opt.rho.toFixed(3) : "", f.opt ? (f.opt.rho * G).toFixed(2) : "", f.opt ? f.opt.w.toFixed(1) : "",
+      sa ? (sa.S * 100).toFixed(1) : "", sa ? (sa.A * 100).toFixed(1) : "", f.airWet != null ? (f.airWet * 100).toFixed(1) : "", f.opt ? (f.bracketed ? "yes" : "no") : "", checksFor(s, f).map(m => m[1].replace(/<[^>]+>/g, "")).join(" | ")]);
+  });
+  download(new Blob([csv(rows)], { type: "text/csv" }), "compaction-results.csv");
+};
+$("dlData").onclick = () => {
+  const rows = [["Soil", "Point", "w (%)", "Dry density (t/m3)", "Dry unit weight (kN/m3)", "Used", "Fitted dry density (t/m3)", "Residual (t/m3)"]];
+  soils.forEach((s, i) => { const f = fits[i]; f.all.forEach(p => { const fv = f.f && p.w >= f.lo && p.w <= f.hi ? f.f(p.w) : null; rows.push([s.name, p.i + 1, p.w, p.rho.toFixed(4), (p.rho * G).toFixed(3), p.ex ? "no" : "yes", fv != null ? fv.toFixed(4) : "", fv != null ? (p.rho - fv).toFixed(4) : ""]); }); });
+  rows.push([]); rows.push(["Fitted curves"]); rows.push(["Soil", "w (%)", "Dry density (t/m3)", "Dry unit weight (kN/m3)"]);
+  soils.forEach((s, i) => { const f = fits[i]; if (!f.f) return; for (let j = 0; j <= 50; j++) { const w = f.lo + (f.hi - f.lo) * j / 50, r = f.f(w); rows.push([s.name, w.toFixed(2), r.toFixed(4), (r * G).toFixed(3)]); } });
+  download(new Blob([csv(rows)], { type: "text/csv" }), "compaction-data.csv");
+};
+
+$("loadDemo").onclick = () => loadDemo($("demo").value);
+sizeChart(); loadDemo("ex41");
+window.__cp = { soils: () => soils, fits: () => fits, fitSoil, polyfit, spline, loadDemo, update, satAir };
+</script>
+</body>
+</html>
