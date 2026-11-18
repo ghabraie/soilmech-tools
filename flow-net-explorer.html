@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Net Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+<style>
+/* Layout: the seepage section across the full width, readouts and results below it, inputs in a grid at the bottom. */
+:root {
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2330; --muted: #5b6676; --rule: #d9dee6; --grid: #e9ecf1;
+  --accent: #1f4fbf; --accent-soft: #e6ecfa;
+  --soil: #f2e7bf; --rock: #b9bec6; --water: #9cc3ef; --waterline: #2463b0; --dam: #c9ccd2; --pile: #1b2330;
+  --eq: #1f5fbf; --fl: #b3261e; --hint: #8a5a00; --hint-soft: #fdf3e1; --bad: #b42318;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+    --accent: #8fb0ff; --accent-soft: #1f2b44;
+    --soil: #4a4228; --rock: #3c424c; --water: #23446b; --waterline: #7fb2ff; --dam: #545b66; --pile: #e5e9ef;
+    --eq: #8fb6ff; --fl: #ff8f84; --hint: #f5c26b; --hint-soft: #33291a; --bad: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1a2029; --ink: #e5e9ef; --muted: #9aa5b4; --rule: #2e3643; --grid: #242b36;
+  --accent: #8fb0ff; --accent-soft: #1f2b44;
+  --soil: #4a4228; --rock: #3c424c; --water: #23446b; --waterline: #7fb2ff; --dam: #545b66; --pile: #e5e9ef;
+  --eq: #8fb6ff; --fl: #ff8f84; --hint: #f5c26b; --hint-soft: #33291a; --bad: #ff8a80;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); padding-inline: 16px; padding-block: 16px 28px; }
+.wrap { max-width: 1140px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font: 600 1.35rem/1.25 var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font: 600 1rem var(--font-body); margin: 0; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 78ch; }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.panel > * { min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+select, .btn { font: 500 0.85rem var(--font-body); border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 6px 10px; }
+select { background: var(--bg); max-width: 100%; }
+.btn { cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn.small { padding: 3px 8px; font-size: 0.8rem; }
+.note { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.note i, label i, .card i, th i, .dbody i { font-family: var(--font-display); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; }
+.checks label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.checks input, input[type=range] { accent-color: var(--accent); }
+.nd { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
+.nd output { font: 600 0.95rem var(--font-data); min-width: 2ch; }
+/* chart */
+.chart svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
+svg text { font-family: var(--font-body); fill: var(--muted); }
+svg .soil { fill: var(--soil); }
+svg .rock { fill: var(--rock); }
+svg .water { fill: var(--water); opacity: 0.75; }
+svg .wline { stroke: var(--waterline); stroke-width: 1.6; }
+svg .dam { fill: var(--dam); stroke: var(--ink); stroke-width: 1.2; }
+svg .pile { stroke: var(--pile); stroke-width: 3.2; stroke-linecap: square; }
+svg .ground { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+svg .eq { stroke: var(--eq); stroke-width: 1.15; fill: none; }
+svg .fl { stroke: var(--fl); stroke-width: 1.15; fill: none; }
+svg .bnd { stroke: var(--muted); stroke-width: 0.8; stroke-dasharray: 3 3; fill: none; }
+svg .lab { font: 11px var(--font-body); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 3.5px; }
+svg .dim { font: 10.5px var(--font-data); fill: var(--muted); }
+svg .cross { stroke: var(--ink); stroke-width: 0.8; opacity: 0.55; }
+svg .hot { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+svg .ubar { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }
+svg .uax { stroke: var(--muted); stroke-width: 1; }
+svg .uval { font: 10.5px var(--font-data); fill: var(--ink); }
+/* readouts */
+.readout { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; font-size: 0.85rem; min-height: 3.2em; }
+.readout div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--rule); padding: 2px 0; }
+.readout span:last-child { font: 500 0.85rem var(--font-data); font-variant-numeric: tabular-nums; color: var(--ink); }
+.readout span:first-child { color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.card { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; }
+.card .k { font-size: 0.78rem; color: var(--muted); }
+.card .v { font: 600 1.05rem var(--font-data); font-variant-numeric: tabular-nums; }
+.card .s { font-size: 0.75rem; color: var(--muted); }
+/* inputs */
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+fieldset { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+legend { font: 600 0.85rem var(--font-body); padding: 0 4px; display: flex; gap: 6px; align-items: center; }
+legend input { accent-color: var(--accent); }
+.f { display: grid; grid-template-columns: 1fr 7.5em; align-items: center; gap: 8px; font-size: 0.84rem; }
+.f label { color: var(--muted); }
+.inp { display: flex; align-items: center; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); min-width: 0; }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 500 0.88rem var(--font-data); padding: 5px 6px; text-align: right; }
+.inp input:focus { outline: none; }
+.inp .unit { padding-right: 6px; color: var(--muted); font-size: 0.76rem; }
+fieldset:disabled .f { opacity: 0.45; }
+.msg { border-radius: 8px; padding: 8px 12px; font-size: 0.86rem; border-left: 4px solid var(--hint); background: var(--hint-soft); }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+summary:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dbody { padding: 0 16px 16px; display: grid; gap: 8px; font-size: 0.88rem; max-width: 84ch; }
+.dbody p { margin: 0; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Flow net explorer</h1>
+    <p class="lede">Seepage under sheet piles and dams, solved numerically and drawn as a flow net. Choose the number of potential drops and see the flow net that goes with it. Move the pointer over the soil to read the total head, pore water pressure and hydraulic gradient at any point. Change the geometry or make the soil anisotropic and watch the flow net respond.</p>
+  </header>
+
+  <section class="panel">
+    <div class="row">
+      <select id="preset" aria-label="Problem">
+        <option value="pile">Sheet pile wall</option>
+        <option value="dam">Concrete dam</option>
+        <option value="damcut">Dam with an upstream cut-off</option>
+        <option value="damtoe">Dam with a downstream cut-off</option>
+        <option value="aniso">Dam on anisotropic soil (chapter example)</option>
+        <option value="custom">Custom</option>
+      </select>
+      <div class="nd"><label for="nd">Potential drops, <i>N</i><sub>d</sub></label><input type="range" id="nd" min="3" max="24" step="1" value="10"><output id="ndv">10</output></div>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="showEq" checked> Equipotential lines</label>
+      <label><input type="checkbox" id="showFl" checked> Flow lines</label>
+      <label id="viewWrap"><input type="checkbox" id="transformed"> Show the transformed section</label>
+    </div>
+  </section>
+
+  <section class="panel chart" aria-label="Seepage section">
+    <svg id="svg" viewBox="0 0 1000 420" role="img" aria-label="Cross-section with the flow net"></svg>
+    <div class="readout" id="readout" aria-live="polite"><p class="note">Move the pointer (or touch) over the soil to read values.</p></div>
+    <div class="cards" id="cards"></div>
+    <div id="upliftBox" hidden>
+      <h2>Uplift pressure on the base of the dam</h2>
+      <svg id="usvg" viewBox="0 0 1000 200" role="img" aria-label="Uplift pressure diagram"></svg>
+    </div>
+    <div id="warn"></div>
+    <div class="row"><button class="btn small" id="dlPng">Download PNG</button><button class="btn small" id="dlSvg">Download SVG</button><span class="note" id="dlMsg"></span></div>
+  </section>
+
+  <section class="panel" aria-label="Problem definition">
+    <h2>Problem</h2>
+    <div class="groups">
+      <fieldset>
+        <legend>Water and soil</legend>
+        <div class="f"><label for="H1">Upstream water depth, <i>H</i><sub>1</sub></label><span class="inp"><input id="H1" inputmode="decimal"><span class="unit">m</span></span></div>
+        <div class="f"><label for="H2">Downstream water depth, <i>H</i><sub>2</sub></label><span class="inp"><input id="H2" inputmode="decimal"><span class="unit">m</span></span></div>
+        <div class="f"><label for="D">Thickness of permeable layer</label><span class="inp"><input id="D" inputmode="decimal"><span class="unit">m</span></span></div>
+        <div class="f"><label for="kx">Horizontal <i>k</i><sub>x</sub></label><span class="inp"><input id="kx" inputmode="decimal"><span class="unit">m/s</span></span></div>
+        <div class="f"><label for="ratio">Anisotropy, <i>k</i><sub>x</sub>/<i>k</i><sub>z</sub></label><span class="inp"><input id="ratio" inputmode="decimal"></span></div>
+      </fieldset>
+      <fieldset id="fsDam">
+        <legend><input type="checkbox" id="hasDam"> Concrete dam</legend>
+        <div class="f"><label for="B">Base width, <i>B</i></label><span class="inp"><input id="B" inputmode="decimal"><span class="unit">m</span></span></div>
+        <p class="note">The base rests on the ground surface, starting at <i>x</i> = 0.</p>
+      </fieldset>
+      <fieldset id="fsP1">
+        <legend><input type="checkbox" id="hasP1"> Sheet pile 1</legend>
+        <div class="f"><label for="x1">Position, <i>x</i></label><span class="inp"><input id="x1" inputmode="decimal"><span class="unit">m</span></span></div>
+        <div class="f"><label for="d1">Depth below ground</label><span class="inp"><input id="d1" inputmode="decimal"><span class="unit">m</span></span></div>
+      </fieldset>
+      <fieldset id="fsP2">
+        <legend><input type="checkbox" id="hasP2"> Sheet pile 2</legend>
+        <div class="f"><label for="x2">Position, <i>x</i></label><span class="inp"><input id="x2" inputmode="decimal"><span class="unit">m</span></span></div>
+        <div class="f"><label for="d2">Depth below ground</label><span class="inp"><input id="d2" inputmode="decimal"><span class="unit">m</span></span></div>
+      </fieldset>
+    </div>
+    <p class="note">Positions are measured from the upstream edge (heel) of the dam, or from sheet pile 1 if there is no dam. The ground surface is the datum. Without a dam, only one sheet pile is used.</p>
+  </section>
+
+  <details>
+    <summary>How the flow net is calculated</summary>
+    <div class="dbody">
+      <p>The permeable layer is divided into a fine grid of square cells, and the steady-state seepage equation is solved for the total head at every node by the finite difference (finite volume) method. The upstream and downstream ground surfaces are equipotential lines (<i>h</i> = <i>H</i><sub>1</sub> and <i>h</i> = <i>H</i><sub>2</sub>, with the ground surface as the datum); the base of the dam, the sheet piles and the impermeable layer below are flow lines; the far ends of the model are placed far enough away to have little effect.</p>
+      <p>The equipotential lines are drawn at head intervals of <i>δh</i> = <i>H</i>/<i>N</i><sub>d</sub>. The flow lines are contours of the stream function, drawn at intervals of <i>k′δh</i> per metre, so that each flow channel carries the same flow and the cells are curvilinear squares. The number of flow channels, <i>N</i><sub>f</sub>, is generally not a whole number: the last channel is a part channel, just as when a flow net is sketched by hand. The rate of seepage is <i>q</i> = <i>k′H N</i><sub>f</sub>/<i>N</i><sub>d</sub>, and the shape factor <i>N</i><sub>f</sub>/<i>N</i><sub>d</sub> does not change with the number of potential drops you choose.</p>
+      <p>For anisotropic soils, the problem is solved on the transformed section (horizontal dimensions multiplied by √(<i>k</i><sub>z</sub>/<i>k</i><sub>x</sub>)) with <i>k′</i> = √(<i>k</i><sub>x</sub><i>k</i><sub>z</sub>), and the flow net is then mapped back to the natural section, where its cells are no longer square.</p>
+      <p>The exit gradient is the vertical hydraulic gradient at the downstream ground surface. Next to a sheet pile or the toe of a dam it depends on the grid size, so treat it as an estimate.</p>
+    </div>
+  </details>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const GW = 9.81;
+const PRESETS = {
+  pile:   { H1: 5, H2: 1, D: 10, kx: 1e-5, ratio: 1, hasDam: false, B: 12, hasP1: true, x1: 0, d1: 6, hasP2: false, x2: 10, d2: 4, nd: 10 },
+  dam:    { H1: 5, H2: 0, D: 8, kx: 1e-5, ratio: 1, hasDam: true, B: 12, hasP1: false, x1: 0, d1: 4, hasP2: false, x2: 12, d2: 4, nd: 10 },
+  damcut: { H1: 7, H2: 1, D: 10, kx: 1e-5, ratio: 1, hasDam: true, B: 13, hasP1: true, x1: 3, d1: 5, hasP2: false, x2: 13, d2: 4, nd: 12 },
+  damtoe: { H1: 7, H2: 1, D: 10, kx: 1e-5, ratio: 1, hasDam: true, B: 13, hasP1: true, x1: 13, d1: 5, hasP2: false, x2: 0, d2: 4, nd: 12 },
+  aniso:  { H1: 5, H2: 0, D: 8, kx: 9e-6, ratio: 9, hasDam: true, B: 12, hasP1: false, x1: 0, d1: 4, hasP2: false, x2: 12, d2: 4, nd: 9 }
+};
+const NUM = ["H1", "H2", "D", "kx", "ratio", "B", "x1", "d1", "x2", "d2"], BOOL = ["hasDam", "hasP1", "hasP2"];
+function applyPreset(k) {
+  const p = PRESETS[k]; if (!p) return;
+  NUM.forEach(n => $(n).value = p[n]); BOOL.forEach(n => $(n).checked = p[n]);
+  $("nd").value = p.nd; $("ndv").textContent = p.nd; $("transformed").checked = false;
+  syncFieldsets(); schedule();
+}
+function syncFieldsets() {
+  $("fsDam").querySelectorAll(".f input").forEach(e => e.disabled = !$("hasDam").checked);
+  $("fsP1").querySelectorAll(".f input").forEach(e => e.disabled = !$("hasP1").checked);
+  $("fsP2").querySelectorAll(".f input").forEach(e => e.disabled = !$("hasP2").checked);
+}
+const num = id => { const v = parseFloat(String($(id).value).replace(",", ".")); return isFinite(v) ? v : null; };
+
+// ---------------------------------------------------------------- problem and solver
+function readProblem() {
+  const P = { H1: num("H1"), H2: num("H2"), D: num("D"), kx: num("kx"), ratio: num("ratio"), dam: $("hasDam").checked ? num("B") : null, piles: [] };
+  const errs = [];
+  if (!(P.D > 0)) errs.push("Enter the thickness of the permeable layer.");
+  if (P.H1 == null || P.H2 == null || P.H1 < 0 || P.H2 < 0) errs.push("Enter the upstream and downstream water depths.");
+  else if (P.H1 <= P.H2) errs.push("The upstream water depth must be greater than the downstream depth for water to flow.");
+  if (!(P.kx > 0)) errs.push("Enter a positive hydraulic conductivity.");
+  if (!(P.ratio >= 1 / 100 && P.ratio <= 100)) errs.push("Keep the anisotropy ratio between 0.01 and 100.");
+  if ($("hasDam").checked && !(P.dam > 0)) errs.push("Enter the width of the dam base.");
+  for (const [h, x, d] of [["hasP1", "x1", "d1"], ["hasP2", "x2", "d2"]]) {
+    if (!$(h).checked) continue;
+    if (!P.dam && P.piles.length) continue;                  // without a dam, one pile only
+    const X = num(x), Dp = num(d);
+    if (X == null || !(Dp > 0)) { errs.push("Enter the position and depth of each sheet pile."); continue; }
+    if (P.D > 0 && Dp >= P.D * 0.97) { errs.push("A sheet pile reaching the impermeable layer cuts off the flow completely. Make it shorter than the layer."); continue; }
+    P.piles.push({ x: X, d: Dp });
+  }
+  if (!P.dam && !P.piles.length) errs.push("Add a dam or a sheet pile.");
+  return { P, errs };
+}
+let S = null;           // solution
+function solve(P) {
+  const s = Math.sqrt(1 / P.ratio);                          // x_t = s x  (s = sqrt(kz/kx))
+  const kp = P.kx * s;                                        // k' = sqrt(kx kz) = kx sqrt(kz/kx)
+  const nz = 41, dz = P.D / (nz - 1);
+  const xsN = P.piles.map(p => p.x); let a = P.dam ? 0 : xsN[0], b = P.dam ? P.dam : xsN[0];
+  for (const x of xsN) { a = Math.min(a, x); b = Math.max(b, x); }
+  const ext = 3 * P.D;
+  let X0 = s * a - ext; const X1 = s * b + ext;
+  // grid: sheet piles sit exactly on cell faces (midway between two node columns)
+  const ps = P.piles.map(p => s * p.x);
+  let dx = dz;
+  for (let pass = 0; pass < 4; pass++) {
+    if (ps.length === 2) { const L = Math.abs(ps[1] - ps[0]), m = Math.round(L / dx); if (m >= 1) dx = L / m; }
+    if ((X1 - X0) / dx + 3 <= 900) break;
+    dx = (X1 - X0) / 896;
+  }
+  if (ps.length) { const k = Math.ceil((ps[0] - X0) / dx - 0.5); X0 = ps[0] - (k + 0.5) * dx; }
+  const nx = Math.ceil((X1 - X0) / dx - 1e-9) + 1, N = nx * nz;
+  const id = (i, j) => i * nz + j;
+  // conductances (finite volume, unit k): cE link (i,j)-(i+1,j), cS link (i,j)-(i,j+1)
+  const cE = new Float64Array(N), cS = new Float64Array(N);
+  const rz = dz / dx, rx = dx / dz;
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    if (i < nx - 1) cE[id(i, j)] = (j === 0 || j === nz - 1 ? 0.5 : 1) * rz;
+    if (j < nz - 1) cS[id(i, j)] = (i === 0 || i === nx - 1 ? 0.5 : 1) * rx;
+  }
+  const cut = [];                                             // links cut by piles: [i, jmax]
+  for (const p of P.piles) {
+    const ip = Math.min(nx - 2, Math.max(0, Math.round((s * p.x - X0) / dx - 0.5)));
+    let jm = -1;
+    for (let j = 0; j < nz; j++) if (j * dz <= p.d - dz / 2 + 1e-9) { cE[id(ip, j)] = 0; jm = j; }
+    cut.push({ i: ip, jm, x: p.x, d: p.d });
+  }
+  // surface boundary: upstream / downstream / no-flow (under the dam)
+  const fixed = new Uint8Array(N), hv = new Float64Array(N), xt = i => X0 + i * dx;
+  const upEdge = P.dam ? 0 : null, splitI = P.dam ? null : cut[0].i;
+  for (let i = 0; i < nx; i++) {
+    let side;
+    if (P.dam) { const xn = xt(i) / s; side = xn < -1e-9 ? 1 : xn > P.dam + 1e-9 ? 2 : 0; }
+    else side = i <= splitI ? 1 : 2;
+    if (side) { fixed[id(i, 0)] = 1; hv[id(i, 0)] = side === 1 ? P.H1 : P.H2; }
+  }
+  // initial guess: linear between the structure edges
+  const xa = s * a, xb = s * b;
+  for (let i = 0; i < nx; i++) {
+    const x = xt(i), f = x <= xa ? 0 : x >= xb ? 1 : (x - xa) / Math.max(1e-9, xb - xa);
+    for (let j = 0; j < nz; j++) { const n = id(i, j); if (!fixed[n]) hv[n] = P.H1 + (P.H2 - P.H1) * f; }
+  }
+  // SOR
+  const w = 2 / (1 + Math.sin(Math.PI / Math.max(nx, nz))), H = P.H1 - P.H2, tol = 1e-7 * H;
+  let it = 0;
+  for (; it < 20000; it++) {
+    let md = 0;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+      const n = id(i, j); if (fixed[n]) continue;
+      let sc = 0, sh = 0;
+      if (i < nx - 1) { const c = cE[n]; sc += c; sh += c * hv[n + nz]; }
+      if (i > 0) { const c = cE[n - nz]; sc += c; sh += c * hv[n - nz]; }
+      if (j < nz - 1) { const c = cS[n]; sc += c; sh += c * hv[n + 1]; }
+      if (j > 0) { const c = cS[n - 1]; sc += c; sh += c * hv[n - 1]; }
+      if (sc === 0) continue;
+      const d = (sh / sc - hv[n]) * w; hv[n] += d; if (Math.abs(d) > md) md = Math.abs(d);
+    }
+    if (md < tol) break;
+  }
+  // stream function on columns between nodes: psi[i][k], k = 0 at the base ... nz at the surface
+  const psi = []; const zl = [-P.D]; for (let k = 1; k < nz; k++) zl.push(-P.D + (k - 0.5) * dz); zl.push(0);
+  for (let i = 0; i < nx - 1; i++) {
+    const col = new Float64Array(nz + 1); let acc = 0;
+    for (let k = 1; k <= nz; k++) { const j = nz - k, n = id(i, j); acc += cE[n] * (hv[n] - hv[n + nz]); col[k] = acc; }
+    psi.push(col);
+  }
+  // total flow (unit k, transformed section): flow through the column at the structure
+  const iq = P.dam ? Math.min(nx - 2, Math.max(0, Math.floor((s * P.dam / 2 - X0) / dx))) : cut[0].i;
+  const Q1 = psi[iq][nz];
+  // uplift under the dam; exit gradient on the downstream surface
+  let uplift = null;
+  if (P.dam) {
+    const pts = [];
+    for (let i = 0; i < nx; i++) { const xn = xt(i) / s; if (xn >= -1e-9 && xn <= P.dam + 1e-9) pts.push([xn, GW * hv[id(i, 0)]]); }
+    // add the end points by interpolation along the surface
+    const hAt = xn => { const f = (s * xn - X0) / dx, i = Math.min(nx - 2, Math.max(0, Math.floor(f))), t = f - i; return hv[id(i, 0)] * (1 - t) + hv[id(i + 1, 0)] * t; };
+    if (!pts.length || pts[0][0] > 1e-6) pts.unshift([0, GW * hAt(0)]);
+    if (pts[pts.length - 1][0] < P.dam - 1e-6) pts.push([P.dam, GW * hAt(P.dam)]);
+    let F = 0, M = 0; for (let k = 0; k < pts.length - 1; k++) { const [x1, u1] = pts[k], [x2, u2] = pts[k + 1]; const f = (u1 + u2) / 2 * (x2 - x1); F += f; M += f * (x1 + x2) / 2; }
+    uplift = { pts, F, xbar: F ? M / F : 0 };
+  }
+  let iexit = 0, xexit = null;
+  for (let i = 0; i < nx; i++) {
+    const n = id(i, 0); if (!fixed[n] || hv[n] !== P.H2) continue;
+    const g = (hv[n + 1] - hv[n]) / dz; if (g > iexit) { iexit = g; xexit = xt(i) / s; }
+  }
+  return { P, s, kp, nx, nz, dx, dz, X0, X1, h: hv, psi, zl, cut, Q1, H, uplift, iexit, xexit, it, id };
+}
+
+// ---------------------------------------------------------------- contouring (marching squares on a rectilinear grid)
+function contour(nxg, nzg, xAt, zAt, val, level, skip) {
+  const segs = [];
+  for (let i = 0; i < nxg - 1; i++) for (let k = 0; k < nzg - 1; k++) {
+    if (skip && skip(i, k)) continue;
+    const v = [val(i, k), val(i + 1, k), val(i + 1, k + 1), val(i, k + 1)];
+    if (v.some(q => q == null || !isFinite(q))) continue;
+    const P = [[xAt(i), zAt(k)], [xAt(i + 1), zAt(k)], [xAt(i + 1), zAt(k + 1)], [xAt(i), zAt(k + 1)]];
+    const pts = [];
+    for (let e = 0; e < 4; e++) {
+      const a = v[e], b = v[(e + 1) % 4];
+      if ((a < level) !== (b < level)) { const t = (level - a) / (b - a), A = P[e], B = P[(e + 1) % 4]; pts.push([A[0] + t * (B[0] - A[0]), A[1] + t * (B[1] - A[1])]); }
+    }
+    if (pts.length === 2) segs.push(pts);
+    else if (pts.length === 4) { segs.push([pts[0], pts[1]]); segs.push([pts[2], pts[3]]); }
+  }
+  return segs;
+}
+
+// ---------------------------------------------------------------- drawing
+const svg = $("svg"), NS = "http://www.w3.org/2000/svg";
+let W = 1000, Hs = 420, view = null, hover = null;
+function el(tag, a, p) { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); (p || svg).appendChild(e); return e; }
+function sizeChart() {
+  const w = Math.max(320, Math.round(svg.parentNode.clientWidth - 32)); if (Math.abs(w - W) < 2 && view) return false;
+  W = w; return true;
+}
+new ResizeObserver(() => { if (sizeChart() && S) draw(); }).observe(svg.parentNode);
+function setView() {
+  const P = S.P, tr = $("transformed").checked, s = S.s, f = tr ? s : 1;
+  // horizontal window (display units = metres in the chosen section)
+  const xsN = [P.dam ? 0 : null, P.dam || null, ...P.piles.map(p => p.x)].filter(v => v != null);
+  const a = Math.min(...xsN) * f, b = Math.max(...xsN) * f;
+  const pw = W < 600 ? 1.3 : 2.2, pad = tr ? pw * P.D : Math.max(pw * P.D, 0.35 * (b - a));
+  let x0 = Math.max(S.X0 / s * f, a - pad), x1 = Math.min(S.X1 / s * f, b + pad);
+  const top = Math.max(P.H1, P.H2) + (P.dam ? 1.4 : 1.0), bot = -P.D - Math.max(0.6, 0.07 * P.D);
+  const mL = 8, mR = 8, mT = 22, mB = 26;
+  const sc = (W - mL - mR) / (x1 - x0);
+  Hs = Math.round(Math.min(Math.max((top - bot) * sc + mT + mB, 160), 900));
+  const scY = (Hs - mT - mB) / (top - bot), scale = Math.min(sc, scY);    // equal scales so squares look square
+  const wUsed = (x1 - x0) * scale, xOff = mL + (W - mL - mR - wUsed) / 2;
+  view = { tr, f, x0, x1, top, bot, scale, xOff, mT, X: x => xOff + (x - x0) * scale, Z: z => mT + (top - z) * scale };
+  svg.setAttribute("viewBox", `0 0 ${W} ${Hs}`);
+}
+function draw() {
+  svg.textContent = "";
+  if (!S) return;
+  setView();
+  const P = S.P, v = view, s = S.s, f = v.f;
+  const Xn = xn => v.X(xn * f);                     // natural x -> screen
+  const Xt = xt => v.X(xt / s * f);                 // transformed x -> screen
+  const clip = el("clipPath", { id: "cl" }, el("defs", {}));
+  el("rect", { x: v.X(v.x0), y: 0, width: v.X(v.x1) - v.X(v.x0), height: Hs }, clip);
+  const g = el("g", { "clip-path": "url(#cl)" });
+  // soil, rock, water
+  el("rect", { class: "soil", x: v.X(v.x0), y: v.Z(0), width: v.X(v.x1) - v.X(v.x0), height: v.Z(-P.D) - v.Z(0) }, g);
+  el("rect", { class: "rock", x: v.X(v.x0), y: v.Z(-P.D), width: v.X(v.x1) - v.X(v.x0), height: v.Z(v.bot) - v.Z(-P.D) }, g);
+  const upEnd = P.dam ? 0 : P.piles[0].x, dnStart = P.dam ? P.dam : P.piles[0].x;
+  if (P.H1 > 0) { el("rect", { class: "water", x: v.X(v.x0), y: v.Z(P.H1), width: Xn(upEnd) - v.X(v.x0), height: v.Z(0) - v.Z(P.H1) }, g); el("line", { class: "wline", x1: v.X(v.x0), y1: v.Z(P.H1), x2: Xn(upEnd), y2: v.Z(P.H1) }, g); }
+  if (P.H2 > 0) { el("rect", { class: "water", x: Xn(dnStart), y: v.Z(P.H2), width: v.X(v.x1) - Xn(dnStart), height: v.Z(0) - v.Z(P.H2) }, g); el("line", { class: "wline", x1: Xn(dnStart), y1: v.Z(P.H2), x2: v.X(v.x1), y2: v.Z(P.H2) }, g); }
+  // flow net
+  const nd = +$("nd").value, dh = S.H / nd;
+  const nodeX = i => Xt(S.X0 + i * S.dx), nodeZ = j => v.Z(-j * S.dz);
+  if ($("showEq").checked) {
+    let d = "";
+    for (let n = 1; n < nd; n++) {
+      const lev = P.H1 - n * dh;
+      // cells cut by a sheet pile are skipped: their corner heads belong to the two sides of the pile
+      const segs = contour(S.nx, S.nz, nodeX, nodeZ, (i, j) => S.h[S.id(i, j)], lev, (i, k) => S.cut.some(c => c.i === i && k <= c.jm));
+      for (const [p, q] of segs) { if (crossesPile(p, q)) continue; d += `M${p[0].toFixed(1)},${p[1].toFixed(1)}L${q[0].toFixed(1)},${q[1].toFixed(1)}`; }
+    }
+    el("path", { class: "eq", d }, g);
+  }
+  if ($("showFl").checked) {
+    const dpsi = dh;                                   // unit k: square cells
+    const nf = S.Q1 / dpsi; let d = "";
+    for (let n = 1; n < nf - 1e-6; n++) {
+      const segs = contour(S.nx - 1, S.nz + 1, i => Xt(S.X0 + (i + 0.5) * S.dx), k => v.Z(S.zl[k]), (i, k) => S.psi[i][k], n * dpsi);
+      for (const [p, q] of segs) d += `M${p[0].toFixed(1)},${p[1].toFixed(1)}L${q[0].toFixed(1)},${q[1].toFixed(1)}`;
+    }
+    el("path", { class: "fl", d }, g);
+  }
+  // ground surface, structures
+  el("line", { class: "ground", x1: v.X(v.x0), y1: v.Z(0), x2: v.X(v.x1), y2: v.Z(0) }, g);
+  el("line", { class: "ground", x1: v.X(v.x0), y1: v.Z(-P.D), x2: v.X(v.x1), y2: v.Z(-P.D) }, g);
+  if (P.dam) {
+    const Hd = P.H1 + 1.0, tw = Math.max(0.12 * P.dam, Math.min(2, P.dam / 3));
+    el("polygon", { class: "dam", points: [[0, 0], [0, Hd], [tw, Hd], [P.dam, 0]].map(([x, z]) => `${Xn(x).toFixed(1)},${v.Z(z).toFixed(1)}`).join(" ") }, g);
+  }
+  for (const c of S.cut) {                          // drawn on the cell face where the solver places the barrier
+    const inside = P.dam && c.x >= -1e-9 && c.x <= P.dam + 1e-9;
+    const zt = inside ? 0 : Math.max(P.H1, P.H2) + 0.5, xp = Xt(S.X0 + (c.i + 0.5) * S.dx);
+    el("line", { class: "pile", x1: xp, y1: v.Z(zt), x2: xp, y2: v.Z(-c.d) }, g);
+  }
+  // labels
+  el("text", { class: "lab", x: v.X(v.x0) + 6, y: v.Z(P.H1) - 5 }).textContent = `H₁ = ${fmt(P.H1)} m`;
+  el("text", { class: "lab", x: v.X(v.x1) - 6, y: v.Z(Math.max(P.H2, 0)) - 5, "text-anchor": "end" }).textContent = `H₂ = ${fmt(P.H2)} m`;
+  el("text", { class: "lab", x: v.X(v.x0) + 6, y: v.Z(-P.D) + 14 }).textContent = "Impermeable";
+  if (v.tr && Math.abs(s - 1) > 1e-6) el("text", { class: "lab", x: v.X(v.x1) - 6, y: v.Z(-P.D) - 6, "text-anchor": "end" }).textContent = `Transformed section: horizontal × ${fmt(s, 3)}`;
+  drawHover();
+}
+function crossesPile(p, q) {                    // equipotential segments must not bridge a sheet pile
+  const v = view, s = S.s;
+  for (const c of S.cut) {
+    const xp = v.X((S.X0 + (c.i + 0.5) * S.dx) / s * v.f), zb = v.Z(-(c.jm + 0.5) * S.dz);
+    if ((p[0] - xp) * (q[0] - xp) < 0 && Math.max(p[1], q[1]) <= zb + 0.5) return true;
+  }
+  return false;
+}
+const fmt = (x, d = 2) => { const r = +x.toFixed(d); return String(r); };
+const sci = x => { if (x === 0) return "0"; const e = Math.floor(Math.log10(Math.abs(x))), m = x / 10 ** e; return `${m.toFixed(2)}×10${sup(e)}`; };
+const sup = e => String(e).replace(/-/g, "⁻").replace(/\d/g, d => "⁰¹²³⁴⁵⁶⁷⁸⁹"[d]);
+
+// ---------------------------------------------------------------- pointer readout
+function sample(xn, z) {                         // natural x, elevation z -> head, gradients (natural)
+  const s = S.s, xt = s * xn, fx = (xt - S.X0) / S.dx, fz = -z / S.dz;
+  if (fx < 0 || fx > S.nx - 1 || fz < 0 || fz > S.nz - 1) return null;
+  let i = Math.min(S.nx - 2, Math.floor(fx)), j = Math.min(S.nz - 2, Math.floor(fz)); const tz = fz - j; let tx = fx - i;
+  const H = (a, b) => S.h[S.id(a, b)];
+  // keep to one side of a sheet pile
+  const c = S.cut.find(c => c.i === i && j <= c.jm);
+  let hx;
+  if (c) {
+    const side = tx < 0.5 ? i : i + 1, other = tx < 0.5 ? i - 1 : i + 2;
+    const h0 = H(side, j) * (1 - tz) + H(side, j + 1) * tz;
+    const o = Math.min(S.nx - 1, Math.max(0, other)), h1 = H(o, j) * (1 - tz) + H(o, j + 1) * tz;
+    hx = (tx < 0.5 ? (h0 - h1) : (h1 - h0)) / S.dx;
+    const h = h0;
+    const dz_ = (H(side, j + 1) - H(side, j)) / S.dz;              // dh/d(depth)
+    return pack(h, -hx * s, dz_, z);
+  }
+  const h00 = H(i, j), h10 = H(i + 1, j), h01 = H(i, j + 1), h11 = H(i + 1, j + 1);
+  const h = h00 * (1 - tx) * (1 - tz) + h10 * tx * (1 - tz) + h01 * (1 - tx) * tz + h11 * tx * tz;
+  hx = ((h10 - h00) * (1 - tz) + (h11 - h01) * tz) / S.dx;          // dh/dx_t
+  const hd = ((h01 - h00) * (1 - tx) + (h11 - h10) * tx) / S.dz;    // dh/d(depth)
+  return pack(h, -hx * s, hd, z);
+}
+function pack(h, ix, hdepth, z) {               // ix = -dh/dx (natural); iz = -dh/dz (z up) = +dh/d(depth)
+  const iz = hdepth, kx = S.P.kx, kz = S.P.kx / S.P.ratio;
+  return { h, z, ix, iz, i: Math.hypot(ix, iz), vx: kx * ix, vz: kz * iz };
+}
+function drawHover() {
+  if (!hover || !view) return;
+  const [sx, sy] = hover, v = view, P = S.P;
+  const xd = v.x0 + (sx - v.xOff) / v.scale, z = v.top - (sy - v.mT) / v.scale;
+  if (xd < v.x0 || xd > v.x1 || z > 0 || z < -P.D) return;
+  const xn = xd / v.f, r = sample(xn, z); if (!r) return;
+  el("line", { class: "cross", x1: sx, y1: v.Z(0), x2: sx, y2: v.Z(-P.D) }); el("line", { class: "cross", x1: v.X(v.x0), y1: sy, x2: v.X(v.x1), y2: sy });
+  el("circle", { class: "hot", cx: sx, cy: sy, r: 5 });
+  showReadout(xn, r);
+}
+function showReadout(xn, r) {
+  const nd = +$("nd").value, dh = S.H / nd, P = S.P, u = GW * (r.h - r.z);
+  const rows = [["x", `${fmt(xn, 2)} m`], ["Elevation, z", `${fmt(r.z, 2)} m`], ["Total head, h", `${fmt(r.h, 3)} m`], ["Pressure head", `${fmt(r.h - r.z, 3)} m`],
+    ["Pore pressure, u", `${fmt(u, 1)} kPa`], ["Potential drops, n_d", `${fmt((P.H1 - r.h) / dh, 2)}`], ["Gradient, i", `${fmt(r.i, 3)}`], ["iₓ, i_z", `${fmt(r.ix, 3)}, ${fmt(r.iz, 3)}`],
+    ["Discharge velocity", `${sci(Math.hypot(r.vx, r.vz))} m/s`]];
+  $("readout").innerHTML = rows.map(([k, val]) => `<div><span>${k}</span><span>${val}</span></div>`).join("");
+}
+const toLocal = e => { const b = svg.getBoundingClientRect(); return [(e.clientX - b.left) * W / b.width, (e.clientY - b.top) * Hs / b.height]; };
+svg.addEventListener("pointermove", e => { hover = toLocal(e); draw(); });
+svg.addEventListener("pointerdown", e => { hover = toLocal(e); draw(); });
+svg.addEventListener("pointerleave", () => { hover = null; draw(); });
+
+// ---------------------------------------------------------------- results
+function results() {
+  const P = S.P, nd = +$("nd").value, sf = S.Q1 / S.H, nf = sf * nd, q = S.kp * S.Q1;
+  const cards = [
+    ["Flow channels, <i>N</i><sub>f</sub>", fmt(nf, 2), `for <i>N</i><sub>d</sub> = ${nd}`],
+    ["Shape factor, <i>N</i><sub>f</sub>/<i>N</i><sub>d</sub>", fmt(sf, 3), "independent of <i>N</i><sub>d</sub>"],
+    ["Head loss, <i>H</i>", `${fmt(S.H, 2)} m`, `<i>δh</i> = ${fmt(S.H / nd, 3)} m per drop`],
+    ["Rate of seepage, <i>q</i>", `${sci(q)}`, `m³/s per metre (${fmt(q * 86400, 3)} m³/day/m)`],
+    ["<i>k′</i> = √(<i>k</i><sub>x</sub><i>k</i><sub>z</sub>)", sci(S.kp), "m/s"],
+    ["Maximum exit gradient", fmt(S.iexit, 2), S.xexit != null ? `at <i>x</i> ≈ ${fmt(S.xexit, 1)} m (grid estimate)` : ""]
+  ];
+  if (S.uplift) cards.push(["Uplift force on the dam", `${fmt(S.uplift.F, 0)} kN/m`, `acting at <i>x</i> ≈ ${fmt(S.uplift.xbar, 2)} m`]);
+  $("cards").innerHTML = cards.map(([k, v, s]) => `<div class="card"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${s}</span></div>`).join("");
+  $("viewWrap").hidden = Math.abs(S.s - 1) < 1e-9;
+  drawUplift();
+}
+function drawUplift() {
+  const box = $("upliftBox"), us = $("usvg");
+  if (!S.uplift) { box.hidden = true; return; }
+  box.hidden = false; us.textContent = "";
+  const P = S.P, pts = S.uplift.pts, umax = Math.max(...pts.map(p => p[1])), Wu = W, Hu = 190;
+  us.setAttribute("viewBox", `0 0 ${Wu} ${Hu}`);
+  const mL = 60, mR = 30, mT = 30, mB = 30, X = x => mL + x / P.dam * (Wu - mL - mR), Y = u => mT + u / umax * (Hu - mT - mB);
+  const e = (t, a) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k, a[k]); us.appendChild(n); return n; };
+  e("polygon", { class: "ubar", points: [[0, 0], ...pts, [P.dam, 0]].map(([x, u]) => `${X(x).toFixed(1)},${Y(u).toFixed(1)}`).join(" ") });
+  e("line", { class: "uax", x1: X(0), y1: Y(0), x2: X(P.dam), y2: Y(0) });
+  e("rect", { x: X(0), y: Y(0) - 14, width: X(P.dam) - X(0), height: 14, style: "fill:var(--dam);stroke:var(--ink);stroke-width:1" });
+  const lab = (x, u, anchor) => { const t = e("text", { class: "uval", x: X(x), y: Y(u) + 14, "text-anchor": anchor }); t.textContent = `${fmt(u, 1)} kPa`; };
+  lab(0, pts[0][1], "start"); lab(P.dam, pts[pts.length - 1][1], "end");
+  for (const c of P.piles) if (c.x > 1e-6 && c.x < P.dam - 1e-6) {
+    e("line", { x1: X(c.x), y1: Y(0) - 14, x2: X(c.x), y2: Y(umax) + 4, style: "stroke:var(--pile);stroke-width:1.5;stroke-dasharray:3 3" });
+  }
+  const t = e("text", { class: "uval", x: X(S.uplift.xbar), y: Y(0) - 20, "text-anchor": "middle" }); t.textContent = `F ≈ ${fmt(S.uplift.F, 0)} kN/m`;
+  e("line", { x1: X(S.uplift.xbar), y1: Y(umax * 0.65), x2: X(S.uplift.xbar), y2: Y(0) + 2, style: "stroke:var(--ink);stroke-width:1.6" });
+  e("path", { d: `M${X(S.uplift.xbar) - 5},${Y(0) + 9}L${X(S.uplift.xbar)},${Y(0) + 1}L${X(S.uplift.xbar) + 5},${Y(0) + 9}Z`, style: "fill:var(--ink)" });
+}
+
+// ---------------------------------------------------------------- update loop
+let timer = null;
+function schedule() { clearTimeout(timer); timer = setTimeout(run, 60); }
+function run() {
+  const { P, errs } = readProblem();
+  $("warn").innerHTML = errs.length ? `<div class="msg">${errs[0]}</div>` : "";
+  if (errs.length) return;
+  S = solve(P); sizeChart(); draw(); results();
+}
+NUM.forEach(n => $(n).addEventListener("input", () => { $("preset").value = "custom"; schedule(); }));
+BOOL.forEach(n => $(n).addEventListener("change", () => { $("preset").value = "custom"; syncFieldsets(); schedule(); }));
+$("preset").onchange = () => applyPreset($("preset").value);
+$("nd").oninput = () => { $("ndv").textContent = $("nd").value; if (S) { draw(); results(); } };
+["showEq", "showFl", "transformed"].forEach(i => $(i).onchange = () => { if (S) draw(); });
+
+// ---------------------------------------------------------------- downloads
+let dlCap = null;
+try { if (window.claude && typeof window.claude.use === "function") window.claude.use("downloads").then(n => { dlCap = n; }).catch(() => {}); } catch (e) {}
+async function download(blob, name) {
+  $("dlMsg").textContent = "";
+  if (dlCap) { try { await dlCap.save({ filename: name, data: blob }); } catch (err) { if (!err || err.code !== "declined") $("dlMsg").textContent = "Downloads are not available in this view."; } return; }
+  try { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500); } catch (err) { $("dlMsg").textContent = "This browser blocked the download."; }
+}
+const PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "opacity", "font-family", "font-size", "font-weight", "paint-order"];
+function exportSVG() {
+  const keep = hover; hover = null; draw();
+  const clone = svg.cloneNode(true), src = svg.querySelectorAll("*"), dst = clone.querySelectorAll("*");
+  src.forEach((n, i) => { const cs = getComputedStyle(n); dst[i].setAttribute("style", PROPS.map(p => `${p}:${cs.getPropertyValue(p)}`).join(";")); dst[i].removeAttribute("class"); });
+  clone.setAttribute("xmlns", NS); clone.setAttribute("width", W); clone.setAttribute("height", Hs);
+  const bg = document.createElementNS(NS, "rect"); bg.setAttribute("width", W); bg.setAttribute("height", Hs); bg.setAttribute("fill", getComputedStyle(document.querySelector(".chart")).backgroundColor); clone.insertBefore(bg, clone.firstChild);
+  hover = keep; draw();
+  return new XMLSerializer().serializeToString(clone);
+}
+$("dlSvg").onclick = () => download(new Blob([exportSVG()], { type: "image/svg+xml" }), "flow-net.svg");
+$("dlPng").onclick = () => {
+  const img = new Image(), url = URL.createObjectURL(new Blob([exportSVG()], { type: "image/svg+xml" }));
+  img.onload = () => { const c = document.createElement("canvas"); c.width = W * 2; c.height = Hs * 2; const g = c.getContext("2d"); g.scale(2, 2); g.drawImage(img, 0, 0); URL.revokeObjectURL(url); c.toBlob(b => download(b, "flow-net.png")); };
+  img.src = url;
+};
+
+applyPreset("pile");
+window.__fn = { solve, readProblem, S: () => S, sample };
+</script>
+</body>
+</html>
